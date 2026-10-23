@@ -1,0 +1,61 @@
+{
+  "name": "@3d24rd0/pi-extensions",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal suite of Pi Coding Agent extensions, skills, and prompts",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test",
+    "prepublishOnly": "npm run check",
+    "rel": "node scripts/release-pkg.mjs",
+    "pub": "node scripts/publish-pkg.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
+  },
+  "devDependencies": {
+    "@colbymchenry/codegraph": "^1.0.1",
+    "@earendil-works/pi-ai": "^1.4.0",
+    "@earendil-works/pi-coding-agent": "^1.4.0",
+    "@earendil-works/pi-tui": "^1.4.0",
+    "@rolldown/binding-wasm32-wasi": "^1.2.4",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typebox": "^1.3.4",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.9",
+    "yaml": "^2.9.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./packages/pi-antigravity-bridge/extensions"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts/*.md"
+    ],
+    "themes": [
+      "./themes/*.json"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3d24rd0/pi-extensions.git"
+  },
+  "author": {
+    "name": "3d24rd0"
+  },
+  "keywords": [
+    "pi-package"
+  ]
+}

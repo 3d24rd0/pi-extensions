@@ -1,0 +1,289 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.3.1] - 2026-10-21
+
+### Added
+- The generated reviewer agent.md frontmatter is now pinned by a test that parses it with a real YAML parser. The plan-review tool shares the failure mode fixed in pi-antigravity-bridge 1.8.3 (agy silently drops an agent whose frontmatter does not parse); the guard keeps a future wording edit from reintroducing it here.
+
+## [1.3.0] - 2026-10-12
+
+### Changed
+- Settings dialog now renders on the shared `@estebanforge/pi-tui-dialogs` framed dialog kit instead of the bare pi-tui `SettingsList`: bordered rows, a help panel per setting, type-to-search, and the config file path under the title. Same three rows, same stage-then-save-on-close behavior.
+
+## [1.2.13] - 2026-10-12
+
+### Changed
+
+- Default `timeoutMinutes` is now 30 (was 10). Delegations carry feedback, research, review, and analysis work that legitimately runs long; a short default kills the run mid-task and the caller re-pays the whole prompt at a higher timeout. Callers still override per call, lower or higher.
+
+## [1.2.12] - 2026-10-10
+
+### Added
+
+- Peer prompts now carry a `[TIME BUDGET]` notice matching the resolved timeout (default 10 minutes), placed before the plan-mode guard banners so the safety constraints stay the last text the model reads. `timeoutMinutes` values that cannot arm a real timer (non-positive, non-finite, above the 35791-minute ceiling) are rejected with a clear error instead of arming an instant-kill watchdog.
+
+### Fixed
+
+- Project-scope config files resolve under `.pi/` again (`<project>/.pi/ask-*.json`): the shared-layer refactor passed the workspace root where the shared primitive expects the directory containing the file, so project configs would have been read from and written to the workspace root. Restores pre-refactor behavior.
+- The live stdout accumulator applies the original 1MB valve again (past 1MB, keep the last 100k) — the shared-layer refactor had left it uncapped.
+
+### Changed
+
+- **Internal dedup onto `pi-ask-shared` (behavior-preserving).** Config load/save composes the shared layered-config primitives (same homedir-based global path, same project-shadow routing, same atomic write); the spawn lifecycle (detached process group, SIGTERM→SIGKILL grace, watchdog, abort, settle-on-close) runs through the shared `runProcess`; the `agy models` line grammar, tiered alias resolution, plan-mode guard prompts, argv builder, and the SQLite conversation-id discovery technique moved to the shared peer adapter (`peers/antigravity.ts`). No user-facing behavior change: plan runs still never receive the skip-permissions flag (env-injected copies still stripped), conversation binding still disambiguates concurrent runs via the /proc FD scan, and the full test suite passes unchanged.
+
+## [1.2.11] - 2026-10-07
+
+### Added
+
+- **Background runs (`background`, opt-in, default blocking).** Detached runs with the shared wake contract: `runId` at once, the answer arrives later as a conversation message with the resume handle (when agy reports one; discovery misses say so) under an UNTRUSTED banner. `/agy-stop [runId]` kills a run. One run per conversation at a time across blocking and background (per-handle lock). Refused in print/json mode; session replacement kills in-flight runs and loses their results; the staged context file and plan-mode reviewer dir are cleaned on every exit path including session shutdown.
+
+### Fixed
+
+- **Plan runs are no longer auto-approved and no longer claim enforcement.** The CLI does not gate writes under plan mode ([#1181](https://github.com/google-antigravity/antigravity-cli/issues/1181)): the previously documented "write attempts fail at plan approval" behavior never held, and plan runs carrying the skip-permissions flag (whenever the restricted agent staged) were write-capable. Plan runs now never receive the flag (including via `AGY_EXTRA_ARGS`, filtered by prefix), the restricted agent is documented as a damper, and the tool description, param description, and README no longer call plan review-only or enforced.
+
+## [1.2.10] - 2026-10-06
+
+### Changed
+
+- **Breaking: model aliases track agy's Claude 5.5 tiered catalog.** `sonnet`/`opus` now resolve to `claude-sonnet-5-5`/`claude-opus-5-5` with the tier riding `--effort` (nearest-tier pick against the requested thinking level), replacing the retired fixed `claude-sonnet-4-6`/`claude-opus-4-6-thinking` slugs Google removed from Antigravity. The static overlay carries the full low/medium/high spread so the aliases still resolve when the live catalog omits Claude, and the bare base id (`claude-sonnet-5-5`) resolves to the nearest tier variant because a bare base is rejected upstream. Exact tiered ids (`claude-sonnet-5-5-low`) split to base + effort exactly like Gemini's.
+- **The `gpt-oss` alias and its overlay entry are removed** ahead of upstream's announced removal of that family: nobody used the fixed-thinking slug and it loses to the cheaper tiered options. The alias now resolves to nothing (the raw string passes to agy and fails there) instead of the tool offering a dying model.
+
+## [1.2.9] - 2026-09-28
+
+### Fixed
+
+- **Plan-mode delegations enforce read-only instead of promising it.** Port of the bridge fix one commit earlier in the stack: the prompt-only guard failed in the field (a plan delegation behind an env-injected skip flag still edited files), so plan-mode runs now stage a temporary agy agent — `tools:` limited to `view_file` and `run_command`, `commandExecutionPolicy: auto`, `inheritMcp: false` — under the shared `~/.gemini/config/agents` discovery root and pass `--agent`. No file-editing tool in the toolset means no edit call is possible, with or without `--dangerously-skip-permissions` (probed on agy 1.2.12); the policy is what lets analysis commands run headless for users with no allow rules. With the agent staged, the skip flag returns under the shared `skipPermissions` knob; staging failure falls back fail-closed to no agent, no flag, and the strict all-commands-forbidden guard, with an env-injected skip flag stripped from `AGY_EXTRA_ARGS` on that path. Includes the standalone sweep for orphaned agent dirs (pid-marker doctrine), duplicated rather than extracted: the standalone stays self-contained per repo convention. Tool descriptions state the residual honestly: file-editing tools are hard-blocked, arbitrary shell execution under the flag is prompt-guarded alone.
+- **Headless plan prompts say what they cannot do.** Same hardening as the bridge: plan prompts append an explicit no-commands constraint and a state-what-is-missing instruction, converting the soft-denied empty-output death of a shell-command attempt into a visible missing-content request. On the enforced path the guard yields to the mutation-forbidding variant; the command-forbidding rule remains on the fallback path.
+
+## [1.2.8] - 2026-09-25
+
+### Fixed
+
+- **Exit 0 with no output is a failure, not a silent success.** Same bug as the bridge fix: a headless `agy -p` run auto-denies a permission-gated tool call (the command gate in plan mode bites hardest since plan runs never receive the skip flag), prints the reason only to stderr, exits 0, and the execute path fell through to success, returning just the conversation footer. An empty answer now returns a loud failure note carrying the stderr plus the remedy (allow-list the command under `permissions.allow`, or rerun outside plan mode), and a new `details.empty` marker flips the TUI result row to its error glyph instead of a green checkmark. Three new tests pin both stderr shapes and the glyph flip through the fake-binary stub; HOME is pointed at an empty tmpdir during them so the bridge-deferral scan finds nothing and the factory registers.
+
+## [1.2.7] - 2026-09-25
+
+### Fixed
+
+- **Plan mode never receives `--dangerously-skip-permissions`.** agy's plan-mode no-write gate IS a permission request ("File creation requires plan approval"), and the skip flag auto-approves every permission request — so a `mode: "plan"` delegation could edit the workspace inside the `--add-dir` grant despite the review-only contract. The default `skipPermissions` knob made this the out-of-the-box behavior. Probe evidence transfers directly (same binary, same `-p` path): with the flag a plan run wrote files; without it, file-write and run_command attempts end exit 0 in ~20-30 s with a "confirm plan" message — fail-visible, never the upstream #318 prompt-hang. Plan runs now never receive the flag, and the tool description and README state the enforcement instead of the aspirational claim.
+
+Version 1.2.6 was a fleet-wide version stamp with no package changes.
+
+## [1.2.5] - 2026-09-18
+
+### Added
+
+- **`thinking` / `effort` params on AskAntigravity (synonyms).** Port of the pi-antigravity-bridge fix: delegation calls had no direct tier knob (only tier sugar inside `model`, "flash high"), so a caller told "peer review on high thinking" fell through to the configured default with no signal anything was dropped. `thinking` takes pi vocabulary (minimal|low|medium|high|xhigh|max, clamped to agy's low|medium|high; unknown values fall back to low) and `effort` is the same knob under agy's own name. Explicit level beats a tier embedded in `model` and the config default; different values on both errors; fixed-thinking families ignore it because agy rejects `--effort` for them.
+
+## [1.2.4] - 2026-08-13
+
+### Added
+
+- **Model, thinking tier, and mode shown next to the tool name.** While a
+  delegation runs, the TUI now renders
+  `AskAntigravity [model=gemini-3.6-flash, thinking=high]` with a prompt
+  preview, plus a tidy result row (`✓ AskAntigravity 12.3s`) with an
+  expandable body. Built on pi's `renderCall`/`renderResult` hooks; the
+  values shown are the resolved config defaults (model alias + tier), not
+  just the args the caller passed. `AgyDetails` gained a `thinking` field.
+- **Opt-in full-context delegation (`includeContext`).** New boolean param
+  (default `false`, isolated one-shot unchanged). When `true`, the current pi
+  conversation is exported as resolved markdown to
+  `~/.pi/extensions-data/estebanforge/pi-ask-antigravity/` and the prompt
+  tells agy to read it first. The run passes `--add-dir` for that folder so
+  the sandbox can read it; the temp file is removed after the run.
+
+## [1.2.3] - 2026-08-10
+
+### Fixed
+
+- **Model parsing now handles agy's real two-column output.** `agy models`
+  prints `<slug>  <display label>` per line, and `--model` accepts only the
+  slug. `parseModelLine` swallowed the whole line and the static
+  `sonnet`/`opus`/`gpt-oss` overlay used display labels, so `--model` was
+  rejected. It now splits column 1; the overlay uses real slugs
+  (`claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`);
+  and `resolveModel` returns a `{model, effort?}` shape that sends
+  Gemini-family bases' tier to `--effort` while fixed-thinking families keep
+  the exact slug with no `--effort` (agy rejects it for them).
+  `parseModelLine`/`mergeCatalog`/`resolveModel` are now exported, with
+  two-column parser tests on the verified live `agy models` fixture.
+
+## [1.2.1] - 2026-08-06
+
+### Changed
+- **Dependencies updated.** Raised the `pi-coding-agent`, `pi-ai`, `pi-tui` dev pins to `^0.84.0`. Audited against the pi v0.84.0 breaking changes (renamed `ModelsRequestTransforms`, null-tolerant `getApiKeyAndHeaders` headers, dropped `message_update` partial fields, v4 session APIs); no code changes were needed and `tsc`/`typecheck` passes against 0.84.0.
+
+## [1.2.0] - 2026-07-26
+
+### Added
+
+- **`permissions` config + `/agy` row + `AGY_SKIP_PERMISSIONS` env.** Controls
+  the new flag. Default `auto-approved` (required for non-interactive use); set
+  to `prompt` (`/agy` picker, or `AGY_SKIP_PERMISSIONS=0`) to disable - but
+  then any `run_command` hangs until you kill the call. Matches the bridge's
+  permissions knob.
+
+### Changed
+
+- **Defers to `pi-antigravity-bridge` when it is installed.** The bridge now
+  ships both the streaming antigravity provider AND the `AskAntigravity` tool
+  (same shape as `pi-claude-bridge`). To avoid a duplicate-tool clash, this
+  extension detects the bridge at load and, if present, registers nothing -
+  silently. Detection does not use module resolution (pi isolates each
+  package's module root); it checks an in-process `Symbol.for` flag the bridge
+  sets AND the bridge's package.json at pi's install paths
+  (`@estebanforge/pi-antigravity-bridge/package.json`). Order-independent for
+  npm/git installs; for local/source installs relies on the in-process flag
+  (install the bridge first so it loads first). Without the bridge, behavior is
+  unchanged.
+
+### Fixed
+
+- **`run_command` no longer hangs the tool.** `--mode accept-edits` auto-approves
+  file edits but NOT shell commands, so any task that triggered a `run_command`
+  hung forever on an unanswerable `y/n` prompt in non-interactive `-p` mode
+  (same root cause the pi-antigravity-bridge provider hit). The tool now passes
+  `--dangerously-skip-permissions` by default. Backported from the bridge.
+
+## [1.1.0] - 2026-07-25
+
+### Fixed
+
+- **`CONV_ID_RE` rejected real agy conversation ids, silently breaking the
+  "continued conversation" feature.** The regex was
+  `/^[A-Za-z0-9]{1,128}$/` (no hyphens in the character class), but agy
+  conversation ids are hyphenated UUIDs (e.g.
+  `9e6fdc2f-f9f9-4096-95fc-7852528b50cc`, the very example in the source
+  comment). Every legitimate id failed validation, so `isContinuation`
+  was always `false`, `--conversation <id>` was never passed, and every
+  "continued" call quietly started a brand-new agy conversation instead
+  of resuming. Now allows hyphens in the body
+  (`/^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/`) while preserving the threat
+  model: first char must be alphanumeric, so leading-dash flag-injection
+  values are still rejected. Present since 1.0.0; found by peer review.
+
+### Added
+
+- **`mode` parameter** — replaces the previous `skipPermissions` boolean
+  with an explicit two-way enum: `plan` (review-only, `--mode plan`) and
+  `accept-edits` (agy applies edits, `--mode accept-edits`, default).
+  Use `plan` for cross-review and read-only tasks, `accept-edits` for
+  implementation.
+- **`digest` parameter** — when true, the prompt is prefixed with
+  `(Use compact digests, not full file contents.)` to keep `agy` from
+  returning full file payloads. Default: `true` for `plan`,
+  `false` for `accept-edits`. Override per call.
+- **Non-Gemini alias overlay** — `sonnet`, `opus`, and `gpt-oss` now
+  resolve to the exact agy strings `Claude Sonnet 4.6 (Thinking)`,
+  `Claude Opus 4.6 (Thinking)`, and `GPT-OSS 120B (Medium)`. A
+  static short-alias map is checked before the family parser, so
+  these names resolve even when `agy models` does not surface them
+  in the live catalog (older agy builds, plan-gated models). The
+  overlay entries are also merged with the live catalog at
+  extension load; live entries always win on case-insensitive
+  full-string equality, so an updated `agy models` listing takes
+  precedence over the hardcoded fallback. Borrowed from
+  `@bacnh85/pi-agy`'s static model map.
+- **Effective `mode` and `digest` surfaced in `details`** — every
+  tool result now reports the resolved mode and whether the digest
+  prefix was applied, so the orchestrating model (and humans reading
+  logs) can see what flags were actually passed to `agy`.
+- **Case-insensitive live-catalog lookup for overlay aliases.** When
+  `sonnet` / `opus` / `gpt-oss` resolve via the overlay, the lookup
+  against the live catalog is now case-insensitive so the
+  "live entries win" guarantee holds even if `agy models` lists the
+  same model under different casing than the hardcoded overlay.
+  Matches `mergeCatalog`'s dedup logic.
+
+### Changed
+
+- **Breaking: `skipPermissions` parameter is removed.** Use `mode`
+  instead. The previous `skipPermissions: true` (which passed
+  `--dangerously-skip-permissions`) was a coarse proxy for the new
+  `mode: "accept-edits"` and is no longer the right primitive. Use
+  `mode: "plan"` for review-only flows. No callers in the wild
+  depend on the old boolean (the package shipped 2026-07-07), so
+  the break is contained to a single minor bump.
+- **No `sandbox` enum value.** A peer review caught that agy's
+  `--sandbox` flag is an orthogonal shell-containment setting,
+  not an "edit preview" mode. Users who need shell containment
+  should set `AGY_EXTRA_ARGS=--sandbox` in their environment.
+- **Tool description** now documents the `mode` and `digest`
+  affordances so the orchestrating model knows about them.
+
+## [1.0.1] - 2026-07-23
+
+### Fixed
+
+- **`gemini-flash-latest` and `gemini-pro-latest` aliases now win over
+  versioned entries when no version is pinned.** Previously, asking for
+  `flash` resolved to the highest version of the flash family (e.g.
+  `Gemini 3.6 Flash (Medium)`), which is a concrete snapshot — not
+  Google's "latest release" pointer. The resolver now prefers entries
+  with `version: null` (the aliases that `parseModelLine` produces from
+  names like `Gemini Flash Latest`) over versioned entries. Falls back
+  to the highest version if no alias is present in the catalog, so
+  older agy builds without `*-latest` entries keep working.
+- **Leading-dash values passed as `model` are rejected before reaching
+  argv.** A value like `--dangerously-skip-permissions` used to land
+  verbatim as the `--model` token; the tool now refuses it with a clear
+  error message, matching the `CONV_ID_RE` threat model already applied
+  to conversation ids.
+
+### Changed
+
+- `modelParam` is now a plain `Type.String()` instead of a conditional
+  `StringEnum` built from the live catalog. The enum was too restrictive
+  when discovery succeeded (the common case): any tiered or pinned
+  alias like `"flash high"` or `"3.5 flash"` failed AJV validation
+  before `resolveModel` ever saw it. Plain `Type.String()` lets the
+  resolver handle every documented form and falls back to agy for
+  unknown slugs. The now-unused `StringEnum` import is gone.
+
+## [1.0.0] - 2026-07-07
+
+Initial release.
+
+### Added
+
+- **`AskAntigravity` tool** — delegates a self-contained sub-task to Google
+  Antigravity's `agy` CLI (the CLI for Gemini) via `agy -p`, streams stdout
+  as partial output, and returns the final response. The tool answers to
+  three names the CLI is known by — **gemini**, **antigravity**, and **agy**
+  — surfaced in its description so the model maps any of them to this single
+  tool.
+- **Multi-turn conversations with agy** — optional `conversationId` param.
+  Omit for a one-shot (agy starts fresh); pass the id returned in a prior
+  call's result (`details.conversationId`) to resume that conversation with
+  full context. The agent decides per call which mode to use. On fresh runs
+  the extension discovers the new conversation id agy creates (snapshot +
+  diff of agy's conversations dir, the one technique borrowed from
+  [`antigravity-acp`](https://github.com/shubzkothekar/antigravity-acp)'s
+  `scan.ts`); on continued runs it passes `--conversation <id>` which agy
+  resumes natively. agy holds all state in its own SQLite DB; the extension
+  is otherwise stateless.
+- **Friendly model aliases** — `flash`, `pro`, `gemini`, plus tier/version
+  qualifiers (`flash high`, `3.1 pro`). Aliases resolve to the exact
+  `agy models` string using numeric version comparison, with nearest-tier
+  fallback (Pro has no Medium → falls back to High; ties break toward the
+  higher tier so "latest and greatest" wins).
+- **`/agy` slash command** — interactive picker (`SettingsList`) for the
+  default model and default thinking tier. If the project config shadows the
+  global, the change is written there so it actually takes effect; otherwise
+  it writes to global. Outside TUI (RPC/headless), prints a read-only status
+  snapshot.
+- **Config file** — `~/.pi/agent/ask-antigravity.json` (global) merged over
+  `.pi/ask-antigravity.json` (project). Atomic writes (temp + rename).
+- **Defaults** — model `flash`, thinking `medium` (Gemini 3.5 Flash Medium).
+- **Circular-delegation guard** — refuses to spawn agy when the active Pi
+  provider is already `antigravity`/`agy`.
+- **Process lifecycle** — spawned `agy` runs in a detached process group so
+  its own exec subprocesses are killed on abort/timeout (not orphaned); a
+  watchdog enforces the timeout cap directly (not just via agy's
+  `--print-timeout`); stdout/stderr decoded at the stream level for UTF-8
+  safety across pipe chunks; throttled status updates avoid O(n²) re-renders.
+- **Environment support** — `AGY_BIN`, `AGY_EXTRA_ARGS`,
+  `AGY_CONVERSATIONS_DIR`.
