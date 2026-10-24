@@ -13,35 +13,57 @@ Shared infrastructure: session binding (`sessions.json`), runtime config, the `A
 ## Module map
 
 ```
-extensions/index.ts   pi extension entry: provider registration, model discovery, /agy command, lifecycle notices
-src/provider.ts       streamSimple: pi Context -> agy turn -> pi event stream; owns the G9 round-trip store and the G1 digest
+extensions/index.ts   pi extension entry: provider registration, model discovery, /agy command registration, lifecycle notices
+src/commands.ts       /agy command tree and interactive settings UI dialogs (engine, login, doctor, thinking defaults)
+src/provider.ts       antigravityProvider: streamTurn, per-model engine routing, driver orchestration, usage accounting
+src/prompt-digest.ts  prompt extraction, image attachments, system prompt framing, G1 context delta digest
+src/tool-roundtrips.ts G9 no-patch MCP tool parking (ToolRoundTrips), EscalationRegistry, WrapperReplay, approval gates
 src/driver.ts         stream-json driver: persistent agy process, turn serialization, conversation binding, idle/abort timers
 src/stream-events.ts  agy NDJSON event parser (init / step_update / result) + usage mapping onto pi's Usage
 src/native-tools.ts   maps agy read-only tool steps to real pi builtins (read/ls/grep/find) for native re-execution
 src/skills.ts         activate_skill bridge: exposes the pi Agent Skills catalog to agy, answered by the bridge directly
-src/discovery.ts      DELETED (phase 4 done): conversation-id binding for the AskAntigravity one-shot tool now lives in pi-ask-shared's peer adapter (peers/antigravity), which ask-tool consumes
-src/models.ts         agy models -> pi Model projection (full catalog, per-model effort)
+src/models.ts         agy models -> pi Model projection (full catalog, per-model effort, isAcpCapableModel detection)
 src/sessions.ts       atomic JSON store: pi session -> agy conversation + watermark
 src/config.ts         persisted runtime config (engine + acp block, bridgeTools, digest, mode, model/thinking defaults)
-src/daily-log.ts      daily NDJSON support log (one file per day, 14-day retention, secret redaction, AGY_DEBUG verbose gate); fed by both drivers, the bridge, round-trips, /agy, and ask-tool
-src/redact.ts         redactText(): pattern-based secret scrubbing for free text, word-boundary anchored, applied where stderr tails and error strings leave their holders
+src/daily-log.ts      daily NDJSON support log (one file per day, 14-day retention, secret redaction, AGY_DEBUG verbose gate)
+src/redact.ts         redactText(): pattern-based secret scrubbing for free text, word-boundary anchored
 src/ask-tool.ts       the AskAntigravity one-shot delegation tool (model/thinking defaults)
-src/mcp-server.ts     MCP tool bridge server: ferries tools/list + tools/call; calls park in the provider round-trip. Also the approval park: POST /approval (ticket early-ack) + GET /approval/<id>, fail-closed on timeout/unwired/close
-src/mcp-registration.ts registers/unregisters the bridge in ~/.gemini/config/mcp_config.json for the stream-json CLI (per-pid, atomic, stale sweep) and flips our entries off around AskAntigravity spawns (refcounted; session start re-enables)
-src/approval-gate.ts  shadow tool factory (bash/write/edit): marker calls are ticket-verified approval round-trips, non-marker calls delegate; maps agy native tools onto the shadow surface
-src/approval-detect.ts third-party pi permission-extension detection; resolves approvals.gateMode auto (off until a gate extension exists)
-src/approval-hook.ts  merge-safe .agents/hooks.json staging (PreToolUse) + generated 0600 early-ack/poll hook script; staged timeout exceeds the park budget (hook timeouts soft-pass)
-src/diff-render.ts    stream-json: render agy's file edits as git diffs in pi's thinking stream; formatInlineDiff (no git) renders ACP's native diffs
-src/engine-picker.ts  first-run onboarding: engine picker overlay (SelectList + DynamicBorder), first-run gate (no config file + no AGY_ENGINE), agy binary detection (PATH / AGY_BIN), missing-CLI toast copy
+src/mcp-server.ts     MCP tool bridge server: ferries tools/list + tools/call; calls park in ToolRoundTrips
+src/mcp-registration.ts registers/unregisters the bridge in ~/.gemini/config/mcp_config.json for stream-json CLI
+src/approval-gate.ts  shadow tool factory (bash/write/edit): marker calls are ticket-verified approval round-trips
+src/approval-detect.ts third-party pi permission-extension detection; resolves approvals.gateMode auto
+src/approval-hook.ts  merge-safe .agents/hooks.json staging (PreToolUse) + generated 0600 hook script
+src/diff-render.ts    stream-json: render agy's file edits as git diffs in pi's thinking stream; formatInlineDiff for ACP
+src/engine-picker.ts  first-run onboarding: engine picker overlay, agy binary detection, missing-CLI toast copy
 src/driver-types.ts   TurnDriver contract shared by both engines (request/handle/snapshot types)
-src/frame-guard.ts    stdout frame ceiling + known-noise line filtering shared by both readers (ACP jsonrpc + stream-json driver)
-src/acp/jsonrpc.ts    NDJSON JSON-RPC 2.0 framing with line buffering, a 32 MiB frame ceiling, noise filtering, and typed error results
-src/acp/connection.ts ACP server process + protocol (initialize, session/new+load, prompt with image/resource blocks, config options, cancel probing, parked permission answering)
+src/frame-guard.ts    stdout frame ceiling + known-noise line filtering shared by both readers
+src/acp/jsonrpc.ts    NDJSON JSON-RPC 2.0 framing with line buffering, 32 MiB frame ceiling, typed error results
+src/acp/connection.ts ACP server process + protocol (initialize, session/new+load, prompt, options, cancel, permissions)
 src/acp/events.ts     session/update -> DriverActivity mapping (pure; probe-frame regressions pinned)
-src/acp/driver.ts     AcpDriver: serialized turns, remaining-budget timer pause, Gate D abort, connection-scoped exit handling, reconnect/agentInfo snapshots
+src/acp/driver.ts     AcpDriver: serialized turns, remaining-budget timer pause, Gate D abort, connection-scoped exit handling
 ```
 
 No generated protobuf code, no SQLite dependency.
+
+## Dual-Engine Routing (ACP + Stream-JSON)
+
+The bridge operates two distinct execution engines behind the unified `TurnDriver` interface:
+
+1. **ACP Engine (`agy_acp_server.par`)**:
+   - Google's official Agent Client Protocol server running on JSON-RPC stdio.
+   - Required for multimodal image inputs directly into prompts.
+   - Under Google AI Pro OAuth, only Gemini models (`gemini-*`) are accepted. Non-Gemini models return JSON-RPC error `-32602`.
+
+2. **Stream-JSON Engine (`agy -p` / `stream-json`)**:
+   - The Antigravity CLI process communicating over stdin/stdout NDJSON streams.
+   - Supports Claude models (`claude-sonnet-5-5`, `claude-opus-5-5`), GPT-OSS models, and Gemini models.
+   - Text-only user prompt input; tool-result images ride to model via MCP.
+
+### Automatic Per-Model Dynamic Dispatch
+When `config.engine` is set to `"acp"`, the bridge evaluates `isAcpCapableModel(modelId)` before dispatching each turn:
+- **Gemini models** run on the high-performance ACP engine with full multimodal support.
+- **Claude & GPT models** automatically fall back to the `stream-json` CLI driver.
+This prevents `-32602` runtime rejections, ensuring the user can switch between Claude Opus/Sonnet and Gemini Flash effortlessly without manually flipping `/agy engine`.
 
 ## Stream-json engine
 
