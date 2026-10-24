@@ -15,6 +15,7 @@ import {
 	contextWindowFor,
 	entriesFromRaw,
 	FALLBACK_MODELS,
+	isAcpCapableModel,
 	loadModelCatalogRaw,
 	MODELS_CACHE_TTL_MS,
 	MODELS_OUTPUT_CAP_BYTES,
@@ -339,4 +340,14 @@ test("spawnAgyModelsRaw keeps output at exactly the cap (strict > boundary)", as
 	const raw = await spawnAgyModelsRaw(bin);
 	assert.equal(raw.length, MODELS_OUTPUT_CAP_BYTES);
 	assert.match(raw, /^x+$/);
+});
+
+test("isAcpCapableModel identifies Gemini models as ACP-capable and Claude as stream-json only", () => {
+	assert.equal(isAcpCapableModel("gemini-4-argon"), true);
+	assert.equal(isAcpCapableModel("gemini-3.8-flash-high"), true);
+	assert.equal(isAcpCapableModel({ full: "gemini-4-argon", id: "gemini-4-argon" }), true);
+	assert.equal(isAcpCapableModel("claude-sonnet-5-5"), false);
+	assert.equal(isAcpCapableModel("claude-opus-5-5-high"), false);
+	assert.equal(isAcpCapableModel({ full: "claude-opus-5-5", id: "claude-opus-5-5" }), false);
+	assert.equal(isAcpCapableModel("gpt-oss-120b"), false);
 });

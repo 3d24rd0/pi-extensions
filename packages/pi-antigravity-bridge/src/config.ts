@@ -15,13 +15,17 @@ import os from "node:os";
 import path from "node:path";
 import { normalizeAgyAgentName } from "./agents.js";
 
-const CONFIG_PATH = path.join(
-	os.homedir(),
-	".pi",
-	"agent",
-	"antigravity-bridge",
-	"config.json",
-);
+export function defaultConfigPath(): string {
+	return path.join(
+		os.homedir(),
+		".pi",
+		"agent",
+		"antigravity-bridge",
+		"config.json",
+	);
+}
+
+const CONFIG_PATH = defaultConfigPath();
 
 /** Daily debug logs land here, sorted by day, for post-mortems and user
  *  support (see src/daily-log.ts). Same homedir convention as CONFIG_PATH;
@@ -256,7 +260,7 @@ function readConfigFile(configPath: string): Partial<AgyConfig> {
 }
 
 /** Load config merged over defaults. Env vars override the file when set. */
-export function loadConfig(configPath: string = CONFIG_PATH): AgyConfig {
+export function loadConfig(configPath: string = defaultConfigPath()): AgyConfig {
 	let file: Partial<AgyConfig> = readConfigFile(configPath);
 
 	// Env overrides file (matches the skipPermissions pattern).
@@ -427,7 +431,7 @@ function narrowEngine(raw: string): Engine {
  *  disk on any unrelated save, outliving the env var). Nested objects are
  *  re-normalized to their known keys: a raw passthrough would resurrect
  *  legacy keys (acp.permissions) that loadConfig normalization drops. */
-export function saveConfig(patch: Partial<AgyConfig>, configPath: string = CONFIG_PATH): AgyConfig {
+export function saveConfig(patch: Partial<AgyConfig>, configPath: string = defaultConfigPath()): AgyConfig {
 	const file = readConfigFile(configPath);
 	// Null-safe on nested objects: a hand-edited or legacy file can carry
 	// "acp": null; loadConfig tolerates it, so must saveConfig. Key presence

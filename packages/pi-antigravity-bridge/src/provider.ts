@@ -36,7 +36,7 @@ import type { DriverActivity, TurnDriver, TurnHandle } from "./driver-types.js";
 import { SubagentRoster } from "./subagent-roster.js";
 import { toPiUsage } from "./stream-events.js";
 import { mapAgyToolToNative } from "./native-tools.js";
-import { toAgyEffort, type AgyModelEntry } from "./models.js";
+import { isAcpCapableModel, toAgyEffort, type AgyModelEntry } from "./models.js";
 import { SessionStore } from "./sessions.js";
 import { loadConfig } from "./config.js";
 import { GATE_MARKER, mapNativeToShadow, stripMarkerFields } from "./approval-gate.js";
@@ -1669,7 +1669,11 @@ export function createStreamSimple(
 		// provides one, else the per-call config read (tests). One loadConfig()
 		// read per turn, shared with the session key below.
 		const config = loadConfig();
-		const engine = deps.engine ?? config.engine;
+		const configuredEngine = deps.engine ?? config.engine;
+		const entry = entries.find((e) => e.id === model.id) ?? null;
+		const agyModel = entry?.full ?? model.id;
+		const supportsAcp = isAcpCapableModel(entry ?? agyModel);
+		const engine = configuredEngine === "acp" && supportsAcp ? "acp" : "stream-json";
 		const selected = engine === "acp" && deps.acpDriver ? deps.acpDriver : deps.driver;
 		// Plan-shaped provider turns are fail-closed on BOTH engines. ACP has
 		// no plan mode at all (RC01). Stream-json is worse and probed

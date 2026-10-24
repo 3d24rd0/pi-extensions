@@ -32,6 +32,7 @@ import { DIALOG_OPTIONS, DialogMenu, type DialogRow } from "@estebanforge/pi-tui
 import {
 	entriesFromRaw,
 	FALLBACK_MODELS,
+	isAcpCapableModel,
 	loadModelCatalogRaw,
 	toPiModel,
 	type AgyModelEntry,
@@ -146,8 +147,12 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	// Engine switching requires a restart, so the catalog-time engine read is
 	// authoritative for input advertising: image attach rides only when turns
 	// will run on the ACP engine (the stream-json CLI prompt is text-only).
-	const modelInput: Array<"text" | "image"> = engine === "acp" ? ["text", "image"] : ["text"];
-	const models = entries.map((e) => toPiModel(e, modelInput));
+	// Non-ACP models (Claude) run on stream-json even when engine is acp.
+	const models = entries.map((e) => {
+		const supportsAcp = isAcpCapableModel(e);
+		const input: Array<"text" | "image"> = engine === "acp" && supportsAcp ? ["text", "image"] : ["text"];
+		return toPiModel(e, input);
+	});
 
 	// failAll reasons the bridge treats as routine (turn end / shutdown
 	// sweep), not faults. Shared by the emitters below and the mcpLog
@@ -347,8 +352,11 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 			];
 		},
 	});
-	// The active engine is resolved from the latched load-time value.
-	const activeDriver = (): TurnDriver => (engine === "acp" ? acpDriver : streamDriver);
+	// The active engine driver is resolved dynamically: whichever driver currently has
+	// an active turn handle owns tool round-trips (crucial when Claude turns run on
+	// streamDriver while global engine is acp). Falls back to the latched engine driver.
+	const activeDriver = (): TurnDriver =>
+		streamDriver.activeHandle ? streamDriver : acpDriver.activeHandle ? acpDriver : engine === "acp" ? acpDriver : streamDriver;
 	// The provider's stream-json slot gets the STREAM driver explicitly - never
 	// activeDriver(), or a load-time acp engine would make deps.driver and
 	// deps.acpDriver the same object and break the engine identity check.
@@ -494,7 +502,9 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		pi.on("message_update", (event, ctx) => {
 			if (!ctx.hasUI || event.message.role !== "assistant" || event.message.provider !== "antigravity" || loadConfig().acp.usageEstimate === "off") return;
 			const { input, output } = event.message.usage;
-			const status = ctx.ui.theme.fg("dim", `ACP ≈ ${input} in / ${output} out`);
+			const isAcp = isAcpCapableModel(event.message.model);
+			const label = isAcp ? "ACP ≈" : "agy ≈";
+			const status = ctx.ui.theme.fg("dim", `${label} ${input} in / ${output} out`);
 			if (status !== lastUsageStatus) {
 				lastUsageStatus = status;
 				ctx.ui.setStatus("agy-usage", status);

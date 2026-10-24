@@ -152,6 +152,9 @@ test("streamSimple forwards image blocks from the user message to the driver", a
 test("streamSimple forwards the config turn caps to the driver", async () => {
 	const prevTurn = process.env.AGY_TURN_TIMEOUT_MIN;
 	const prevIdle = process.env.AGY_INACTIVITY_TIMEOUT_MIN;
+	const prevHome = process.env.HOME;
+	const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "agy-test-home-"));
+	process.env.HOME = tmpHome;
 	try {
 		process.env.AGY_TURN_TIMEOUT_MIN = "45";
 		process.env.AGY_INACTIVITY_TIMEOUT_MIN = "5";
@@ -170,11 +173,57 @@ test("streamSimple forwards the config turn caps to the driver", async () => {
 		assert.equal(fallback?.timeoutMin, 20);
 		assert.equal(fallback?.inactivityMin, 5);
 	} finally {
+		process.env.HOME = prevHome;
+		try {
+			fs.rmSync(tmpHome, { recursive: true, force: true });
+		} catch {}
 		if (prevTurn === undefined) delete process.env.AGY_TURN_TIMEOUT_MIN;
 		else process.env.AGY_TURN_TIMEOUT_MIN = prevTurn;
 		if (prevIdle === undefined) delete process.env.AGY_INACTIVITY_TIMEOUT_MIN;
 		else process.env.AGY_INACTIVITY_TIMEOUT_MIN = prevIdle;
 	}
+});
+
+test("streamSimple routes Claude models to streamDriver even when engine is acp", async () => {
+	const streamSeen: { opts?: DriverTurnRequest } = {};
+	const acpSeen: { opts?: DriverTurnRequest } = {};
+	const streamDriver = capturingDriver(streamSeen);
+	const acpDriver = capturingDriver(acpSeen);
+	const store = new SessionStore(tmpStorePath());
+	const entries = [
+		{ full: "gemini-4-argon", id: "gemini-4-argon" },
+		{ full: "claude-opus-5-5", id: "claude-opus-5-5" },
+	];
+	const roundTrips = new ToolRoundTrips(streamDriver);
+
+	const streamSimple = createStreamSimple({
+		entries,
+		store,
+		driver: streamDriver,
+		acpDriver,
+		roundTrips,
+		engine: "acp",
+	});
+
+	// Gemini model -> routed to acpDriver
+	const geminiTurn = streamSimple(
+		{ ...model, id: "gemini-4-argon" },
+		contextWith("hello gemini"),
+		{ cwd: process.cwd() } as unknown as SimpleStreamOptions,
+	);
+	for await (const ev of geminiTurn) void ev;
+	assert.ok(acpSeen.opts, "gemini must run on acpDriver");
+	assert.equal(acpSeen.opts.prompt, "hello gemini");
+
+	// Claude model -> routed to streamDriver (stream-json)
+	const claudeTurn = streamSimple(
+		{ ...model, id: "claude-opus-5-5" },
+		contextWith("hello claude"),
+		{ cwd: process.cwd() } as unknown as SimpleStreamOptions,
+	);
+	for await (const ev of claudeTurn) void ev;
+	assert.ok(streamSeen.opts, "claude must run on streamDriver");
+	assert.equal(streamSeen.opts.prompt, "hello claude");
 });
 
 /** Context with a prior foreign-provider assistant turn, so the G1 digest

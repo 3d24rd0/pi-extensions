@@ -421,4 +421,13 @@ export const FALLBACK_MODELS: AgyModelEntry[] = [
 	{ full: "claude-opus-5-5", id: "claude-opus-5-5", efforts: ["low", "medium", "high"] },
 ];
 
+/** Model families capable of running on the official ACP server.
+ *  As verified live, ACP currently supports only Gemini models under Google AI Pro auth.
+ *  Claude (Sonnet, Opus) and other non-Gemini models reject with -32602 on ACP and
+ *  require the stream-json CLI engine. */
+export function isAcpCapableModel(model: string | AgyModelEntry): boolean {
+	const name = typeof model === "string" ? model : (model.full || model.id);
+	return name.toLowerCase().startsWith("gemini-");
+}
+
 
