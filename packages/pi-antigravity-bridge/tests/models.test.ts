@@ -14,11 +14,13 @@ import { test } from "vitest";
 import {
 	contextWindowFor,
 	entriesFromRaw,
+	expandAgyModels,
 	FALLBACK_MODELS,
 	isAcpCapableModel,
 	loadModelCatalogRaw,
 	MODELS_CACHE_TTL_MS,
 	MODELS_OUTPUT_CAP_BYTES,
+	parseModelEngine,
 	refreshModelsInBackground,
 	spawnAgyModelsRaw,
 	toPiModel,
@@ -347,4 +349,35 @@ test("isAcpCapableModel identifies Gemini models as ACP-capable and Claude as st
 	assert.equal(isAcpCapableModel("claude-opus-5-5-high"), false);
 	assert.equal(isAcpCapableModel({ full: "claude-opus-5-5", id: "claude-opus-5-5" }), false);
 	assert.equal(isAcpCapableModel("gpt-oss-120b"), false);
+});
+
+test("expandAgyModels: expands Gemini to both ACP and CLI, Claude to CLI only", () => {
+	const entries = [
+		{ full: "gemini-4-argon", id: "gemini-4-argon", efforts: ["low", "high"] as const },
+		{ full: "claude-sonnet-5-5", id: "claude-sonnet-5-5", efforts: ["low", "high"] as const },
+	];
+	const models = expandAgyModels(entries as never);
+	assert.equal(models.length, 3);
+
+	const argonAcp = models.find((m) => m.id === "gemini-4-argon-acp");
+	assert.ok(argonAcp);
+	assert.equal(argonAcp?.name, "gemini-4-argon (ACP)");
+	assert.deepEqual(argonAcp?.input, ["text", "image"]);
+
+	const argonCli = models.find((m) => m.id === "gemini-4-argon-cli");
+	assert.ok(argonCli);
+	assert.equal(argonCli?.name, "gemini-4-argon (CLI)");
+	assert.deepEqual(argonCli?.input, ["text"]);
+
+	const claudeCli = models.find((m) => m.id === "claude-sonnet-5-5-cli");
+	assert.ok(claudeCli);
+	assert.equal(claudeCli?.name, "claude-sonnet-5-5 (CLI)");
+	assert.deepEqual(claudeCli?.input, ["text"]);
+});
+
+test("parseModelEngine: extracts baseId and forcedEngine", () => {
+	assert.deepEqual(parseModelEngine("gemini-4-argon-acp"), { baseId: "gemini-4-argon", forcedEngine: "acp" });
+	assert.deepEqual(parseModelEngine("gemini-4-argon-cli"), { baseId: "gemini-4-argon", forcedEngine: "stream-json" });
+	assert.deepEqual(parseModelEngine("claude-opus-5-5-cli"), { baseId: "claude-opus-5-5", forcedEngine: "stream-json" });
+	assert.deepEqual(parseModelEngine("gemini-4-argon"), { baseId: "gemini-4-argon" });
 });

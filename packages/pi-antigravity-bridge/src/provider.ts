@@ -36,7 +36,7 @@ import type { DriverActivity, TurnDriver, TurnHandle } from "./driver-types.js";
 import { SubagentRoster } from "./subagent-roster.js";
 import { toPiUsage } from "./stream-events.js";
 import { mapAgyToolToNative } from "./native-tools.js";
-import { isAcpCapableModel, toAgyEffort, type AgyModelEntry } from "./models.js";
+import { isAcpCapableModel, parseModelEngine, toAgyEffort, type AgyModelEntry } from "./models.js";
 import { SessionStore } from "./sessions.js";
 import { loadConfig } from "./config.js";
 import path from "node:path";
@@ -545,8 +545,9 @@ async function runTurnDriver(
 			};
 		});
 
-	const entry = entries.find((e) => e.id === model.id) ?? null;
-	const agyModel = entry?.full ?? model.id;
+	const { baseId } = parseModelEngine(model.id);
+	const entry = entries.find((e) => e.id === baseId || e.id === model.id) ?? null;
+	const agyModel = entry?.full ?? baseId;
 	const effort = entry?.efforts?.length ? toAgyEffort(options?.reasoning, entry.efforts) : undefined;
 
 	let handle: TurnHandle | undefined;
@@ -853,10 +854,13 @@ export function createStreamSimple(
 		// read per turn, shared with the session key below.
 		const config = loadConfig();
 		const configuredEngine = deps.engine ?? config.engine;
-		const entry = entries.find((e) => e.id === model.id) ?? null;
-		const agyModel = entry?.full ?? model.id;
+		const { baseId, forcedEngine } = parseModelEngine(model.id);
+		const entry = entries.find((e) => e.id === baseId || e.id === model.id) ?? null;
+		const agyModel = entry?.full ?? baseId;
 		const supportsAcp = isAcpCapableModel(entry ?? agyModel);
-		const engine = configuredEngine === "acp" && supportsAcp ? "acp" : "stream-json";
+		const engine = forcedEngine
+			? (forcedEngine === "acp" && supportsAcp ? "acp" : "stream-json")
+			: (configuredEngine === "acp" && supportsAcp ? "acp" : "stream-json");
 		const selected = engine === "acp" && deps.acpDriver ? deps.acpDriver : deps.driver;
 		// Plan-shaped provider turns are fail-closed on BOTH engines. ACP has
 		// no plan mode at all (RC01). Stream-json is worse and probed

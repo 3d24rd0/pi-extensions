@@ -375,15 +375,26 @@ export function contextWindowFor(entry: AgyModelEntry): number {
 	return 200_000;
 }
 
+export interface ToPiModelOptions {
+	engineSuffix?: "acp" | "cli";
+	engineLabel?: "ACP" | "CLI";
+}
+
 /** Project an agy entry to pi's Model shape. `input` advertises accepted
  *  inputs: text-only (default) or text+image. The ACP engine forwards image
  *  blocks natively (probe 2026-09-03); the stream-json CLI prompt is text-only, so
  *  the extension decides by engine at load time. */
-export function toPiModel(entry: AgyModelEntry, input: Array<"text" | "image"> = ["text"]): Model<Api> {
+export function toPiModel(
+	entry: AgyModelEntry,
+	input: Array<"text" | "image"> = ["text"],
+	options: ToPiModelOptions = {},
+): Model<Api> {
 	const effortDriven = !!entry.efforts && entry.efforts.length > 0;
+	const id = options.engineSuffix ? `${entry.id}-${options.engineSuffix}` : entry.id;
+	const name = options.engineLabel ? `${entry.full} (${options.engineLabel})` : entry.full;
 	return {
-		id: entry.id,
-		name: entry.full,
+		id,
+		name,
 		api: "agy-bridge" as Api,
 		provider: "antigravity",
 		// baseUrl/apiKey are not used (streamSimple intercepts everything), but
@@ -403,6 +414,39 @@ export function toPiModel(entry: AgyModelEntry, input: Array<"text" | "image"> =
 		contextWindow: contextWindowFor(entry),
 		maxTokens: 65_536,
 	};
+}
+
+/** Expand agy model entries to explicit engine variants for Pi's /model picker:
+ *  - Models supporting ACP (Gemini) register both `-acp` and `-cli` variants.
+ *  - Models supporting only CLI (Claude, GPT-OSS) register `-cli` variant.
+ */
+export function expandAgyModels(entries: readonly AgyModelEntry[]): Model<Api>[] {
+	const out: Model<Api>[] = [];
+	for (const e of entries) {
+		const supportsAcp = isAcpCapableModel(e);
+		if (supportsAcp) {
+			out.push(toPiModel(e, ["text", "image"], { engineSuffix: "acp", engineLabel: "ACP" }));
+			out.push(toPiModel(e, ["text"], { engineSuffix: "cli", engineLabel: "CLI" }));
+		} else {
+			out.push(toPiModel(e, ["text"], { engineSuffix: "cli", engineLabel: "CLI" }));
+		}
+	}
+	return out;
+}
+
+/** Parse model id to determine base model slug and any forced engine.
+ *  e.g. "gemini-4-argon-acp" -> { baseId: "gemini-4-argon", forcedEngine: "acp" }
+ *       "gemini-4-argon-cli" -> { baseId: "gemini-4-argon", forcedEngine: "stream-json" }
+ *       "gemini-4-argon"     -> { baseId: "gemini-4-argon" }
+ */
+export function parseModelEngine(modelId: string): { baseId: string; forcedEngine?: "acp" | "stream-json" } {
+	if (modelId.endsWith("-acp")) {
+		return { baseId: modelId.slice(0, -4), forcedEngine: "acp" };
+	}
+	if (modelId.endsWith("-cli")) {
+		return { baseId: modelId.slice(0, -4), forcedEngine: "stream-json" };
+	}
+	return { baseId: modelId };
 }
 
 /** Fallback catalog used when `agy models` fails at load (binary missing,

@@ -31,6 +31,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { DIALOG_OPTIONS, DialogMenu, type DialogRow } from "@estebanforge/pi-tui-dialogs";
 import {
 	entriesFromRaw,
+	expandAgyModels,
 	FALLBACK_MODELS,
 	isAcpCapableModel,
 	loadModelCatalogRaw,
@@ -145,15 +146,10 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	// config reads would let a mid-session flip leave ToolRoundTrips,
 	// kickIdle, and reentry pointing at the other engine (round-7 finding).
 	const engine: Engine = loadConfig().engine;
-	// Engine switching requires a restart, so the catalog-time engine read is
-	// authoritative for input advertising: image attach rides only when turns
-	// will run on the ACP engine (the stream-json CLI prompt is text-only).
-	// Non-ACP models (Claude) run on stream-json even when engine is acp.
-	const models = entries.map((e) => {
-		const supportsAcp = isAcpCapableModel(e);
-		const input: Array<"text" | "image"> = engine === "acp" && supportsAcp ? ["text", "image"] : ["text"];
-		return toPiModel(e, input);
-	});
+	// Register models with explicit engine variants:
+	// - ACP-capable models (Gemini) appear as both -acp and -cli variants
+	// - Non-ACP models (Claude, GPT) appear as -cli variants
+	const models = expandAgyModels(entries);
 
 	// failAll reasons the bridge treats as routine (turn end / shutdown
 	// sweep), not faults. Shared by the emitters below and the mcpLog
