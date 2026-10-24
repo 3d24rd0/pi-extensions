@@ -105,10 +105,6 @@ const MODEL_LINE_RE = /^[A-Za-z0-9][A-Za-z0-9._]*-[A-Za-z0-9._-]*$/;
  *  rejected ("requires --effort"). */
 const EFFORT_CAPABLE_FAMILIES: readonly RegExp[] = [/^gemini-/, /^claude-/];
 
-/** Families dropped outright, even while `agy models` still lists them: the
- *  fixed-thinking single slug loses to the cheaper effort-tiered options and
- *  its removal upstream is already announced, so we stop offering it now. */
-const HIDDEN_FAMILY_RE = /^gpt-oss-/;
 
 export interface AgyModelEntry {
 	/** Exact agy --model string to pass: a base slug ("gemini-3.8-flash") when
@@ -309,7 +305,6 @@ export function entriesFromRaw(raw: string): AgyModelEntry[] {
 	for (const line of raw.split("\n")) {
 		const slug = line.trim().split(/\s+/)[0] ?? "";
 		if (!slug || !MODEL_LINE_RE.test(slug)) continue;
-		if (HIDDEN_FAMILY_RE.test(slug)) continue;
 		const m = TIER_RE.exec(slug);
 		const base = m ? (m[1] as string) : slug;
 		const tier = m ? (m[2] as AgyEffort) : null;

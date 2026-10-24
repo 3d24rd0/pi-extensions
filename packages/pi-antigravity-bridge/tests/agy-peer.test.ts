@@ -83,8 +83,9 @@ describe("parseModelLine", () => {
 });
 
 describe("catalog helpers", () => {
-	it("drops hidden families (gpt-oss-*) outright", () => {
+	it("preserves catalog entries without artificial censorship", () => {
 		expect(filterHiddenModels([entry("gpt-oss-120b"), entry("gemini-3.6-flash-low")])).toEqual([
+			entry("gpt-oss-120b"),
 			entry("gemini-3.6-flash-low"),
 		]);
 	});

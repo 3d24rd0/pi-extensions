@@ -137,15 +137,9 @@ const STATIC_SHORT_ALIAS: ReadonlyMap<string, string> = new Map([
 	["opus", "claude-opus-5-5"],
 ]);
 
-/** Families dropped outright even while `agy models` still lists them: the
- *  fixed-thinking single slug loses to the cheaper effort-tiered options and
- *  its removal upstream is already announced, so we stop offering it now. */
-const HIDDEN_FAMILY_RE = /^gpt-oss-/;
-
-/** Drop families we refuse to offer. Exported pure so tests exercise the
- *  same filter the live parse runs; discovery applies it per load. */
+/** Filter catalog entries if needed. Preserved for pipeline compatibility. */
 export function filterHiddenModels(entries: ModelEntry[]): ModelEntry[] {
-	return entries.filter((e) => !HIDDEN_FAMILY_RE.test(e.full));
+	return entries;
 }
 
 /** Merge the live catalog with the static alias overlay. Live entries win on

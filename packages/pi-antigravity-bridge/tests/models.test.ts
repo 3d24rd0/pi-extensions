@@ -233,17 +233,14 @@ test("FALLBACK_MODELS: includes gemini-4-argon, gemini-3.8-flash, claude-sonnet-
 	]);
 });
 
-// Hidden families never register, even while `agy models` still lists them:
-// the single fixed slug goes away upstream next month and nobody used it.
-test("entriesFromRaw: drops hidden families outright", () => {
+test("entriesFromRaw: registers all valid models including fixed slugs", () => {
 	const raw = [
 		"gemini-3.8-flash-high",
 		"gemini-3.8-flash-low",
 		"gpt-oss-120b-medium",
-		"gpt-oss-999b-medium",
 	].join("\n");
 	const ids = entriesFromRaw(raw).map((e) => e.id);
-	assert.deepEqual(ids, ["gemini-3-8-flash"]);
+	assert.deepEqual(ids, ["gemini-3-8-flash", "gpt-oss-120b-medium"]);
 });
 
 // A banner word split from its line (col1 = "Available") is NOT a model slug.

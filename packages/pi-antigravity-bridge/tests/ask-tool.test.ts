@@ -46,9 +46,9 @@ const RAW = [
 const entries = toolModelsFromRaw(RAW);
 const DEFAULT_THINKING = "medium";
 
-test("toolModelsFromRaw: drops the hidden family even while agy still lists it", () => {
-	assert.ok(RAW.includes("gpt-oss-120b-medium"), "fixture must carry the line the filter removes");
-	assert.equal(entries.some((e) => e.full.startsWith("gpt-oss-")), false);
+test("toolModelsFromRaw: includes all valid models from raw catalog", () => {
+	assert.ok(RAW.includes("gpt-oss-120b-medium"), "fixture must carry gpt-oss");
+	assert.equal(entries.some((e) => e.full.startsWith("gpt-oss-")), true);
 });
 
 test("resolveModel: bare base ids resolve to the nearest tier variant", () => {
@@ -126,11 +126,11 @@ test("resolveModel: short aliases pick the tiered Claude entry and split base+ef
 		model: "claude-opus-5-5",
 		effort: "medium",
 	});
-	// gpt-oss is filtered from the catalog and its alias is gone: resolution
-	// returns null so the caller passes the raw string and agy rejects it
-	// loudly instead of the tool offering a dying model.
-	assert.equal(resolveAgyModel("gpt-oss", entries, DEFAULT_THINKING), null);
-	assert.equal(resolveAgyModel("gpt-oss-120b-medium", entries, DEFAULT_THINKING), null);
+	// gpt-oss-120b-medium is an exact slug in entries with tier medium,
+	// non-gemini/claude so it resolves whole without effort split
+	assert.deepEqual(resolveAgyModel("gpt-oss-120b-medium", entries, DEFAULT_THINKING), {
+		model: "gpt-oss-120b-medium",
+	});
 });
 
 test("resolveModel: an exact tiered slug splits to base + effort (not passed whole)", () => {
@@ -140,8 +140,10 @@ test("resolveModel: an exact tiered slug splits to base + effort (not passed who
 		model: "gemini-3.6-flash",
 		effort: "high",
 	});
-	// An exact slug from a filtered family no longer resolves either.
-	assert.equal(resolveAgyModel("gpt-oss-120b-medium", entries, DEFAULT_THINKING), null);
+	// An exact non-effort slug resolves whole.
+	assert.deepEqual(resolveAgyModel("gpt-oss-120b-medium", entries, DEFAULT_THINKING), {
+		model: "gpt-oss-120b-medium",
+	});
 	// Unknown input stays null: the caller passes it raw to agy.
 	assert.equal(resolveAgyModel("futuremodel-9-ultra", entries, DEFAULT_THINKING), null);
 	// Claude tiered slugs split exactly like Gemini's.
