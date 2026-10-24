@@ -16,6 +16,11 @@ import os from "node:os";
 import path from "node:path";
 import type { Engine } from "./config.js";
 
+/** Default or env-configured agy binary name/path. */
+export function resolveAgyBinary(): string {
+	return process.env.AGY_BIN || "agy";
+}
+
 /** Brain root for one engine. `home` injectable for tests. */
 export function agyBrainRoot(engine: Engine, home: string = os.homedir()): string {
 	const scope = engine === "acp" ? "antigravity-acp" : "antigravity-cli";

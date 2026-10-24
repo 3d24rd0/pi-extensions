@@ -12,7 +12,7 @@ Reorganize `pi-antigravity-bridge` into clean, maintainable, single-responsibili
 
 ## Tasks
 
-- [ ] T1: (S1) Remove GPT-OSS censorship and clean up model resolution catalog.
+- [x] T1: (S1) Remove GPT-OSS censorship and clean up model resolution catalog. (84df3bb)
 - [ ] T2: (S2) Extract `/agy` command tree and settings UI from `extensions/index.ts` into structured helper modules.
 - [ ] T3: (S3) Split `provider.ts` into focused modules (`tool-roundtrips.ts`, `prompt-digest.ts`).
 - [ ] T4: (S4, S5) Validate full test suite and verify both ACP and stream-json engine dispatch.
