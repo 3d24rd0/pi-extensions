@@ -31,14 +31,15 @@ The package supports two backend engines for executing Antigravity turns:
 2. **Stream-JSON CLI (`agy -p` / `--input-format stream-json --output-format stream-json`)**:
    - Used for **Claude models** (`claude-sonnet-5-5`, `claude-opus-5-5`) and **GPT-OSS models**.
    - Accepts prompt text on stdin and streams NDJSON events on stdout.
-3. **Automatic Routing**:
-   - In `packages/pi-antigravity-bridge/src/provider.ts`, `streamTurn` dynamically resolves the engine:
-     ```ts
-     const activeEngine = resolvedEngine === "acp" && !isAcpCapableModel(model.id)
-         ? "stream-json"
-         : resolvedEngine;
-     ```
-   - When the user selects Claude in Pi, it routes to `stream-json`. When selecting Gemini, it uses `acp`.
+3. **Explicit Model Variants in `/model`**:
+   - Gemini models expose both `-acp` (multimodal images) and `-cli` (text only) options:
+     * `gemini-4-argon-acp` & `gemini-4-argon-cli`
+     * `gemini-3-8-flash-acp` & `gemini-3-8-flash-cli`
+   - Claude and GPT-OSS models expose only `-cli` options:
+     * `claude-opus-5-5-cli`
+     * `claude-sonnet-5-5-cli`
+     * `gpt-oss-120b-medium-cli`
+   - In `packages/pi-antigravity-bridge/src/provider.ts`, `parseModelEngine` parses the suffix and forces the appropriate driver (`acp` vs `stream-json`) while stripping the suffix before passing the canonical model slug to `agy`.
 
 ### 2. Module Boundaries
 - `extensions/index.ts`: Pi extension entry point. Registers provider, models, slash commands (`registerAgyCommand`), and shadow tools.
