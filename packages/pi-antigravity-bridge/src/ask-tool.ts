@@ -246,7 +246,7 @@ export async function registerAskAntigravityTool(
 			background: Type.Optional(
 				Type.Boolean({
 					description:
-						"NOT supported by this tool. The bridge runs agy through its own delegated flow and the answer must return synchronously to the caller. For background runs use the standalone @estebanforge/pi-ask-antigravity extension. Calls with background=true are refused.",
+						"NOT supported by this tool. The bridge runs agy through its own delegated flow and the answer must return synchronously to the caller. Calls with background=true are refused.",
 				}),
 			),
 		}),

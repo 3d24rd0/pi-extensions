@@ -35,6 +35,7 @@ import {
 	FALLBACK_MODELS,
 	isAcpCapableModel,
 	loadModelCatalogRaw,
+	parseModelEngine,
 	toPiModel,
 	type AgyModelEntry,
 } from "../src/models.js";
@@ -68,7 +69,7 @@ import { setupAuthUrlCapture } from "../src/acp/browser-capture.js";
 import { clearAcpAuthVerified, ensureAcpReady, inspectAcpSetup } from "../src/acp/setup.js";
 import type { TurnDriver, TurnOutcome } from "../src/driver-types.js";
 import { CONFIG_PATH, loadConfig, logsDir, MAX_TURN_CAP_MIN, parseCapMinutes, saveConfig, type AgyMode, type BridgeTools, type Engine, type ThinkingTier } from "../src/config.js";
-import { agyMissingMessage, ENGINE_SETTINGS_ROW_ID, engineSettingsRow, isAgyInstalled, savedEngineMessage, showEnginePicker, shouldOfferEnginePicker } from "../src/engine-picker.js";
+import { agyMissingMessage, isAgyInstalled } from "../src/engine-picker.js";
 import { checkAgyCliVersion, describeAgyVersionCheck, MIN_AGY_VERSION } from "../src/agy-version.js";
 import { isValidAgyAgentName, listAgyAgents } from "../src/agents.js";
 import { formatSubagentRoster, SubagentRoster } from "../src/subagent-roster.js";
@@ -378,10 +379,8 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	// the provider; /agy subagents renders it. In-memory, process-lifetime.
 	const roster = new SubagentRoster();
 	// ACP tool activity is display-only: durable Pi entries with native-looking
-	// titles and optional diffs. Unlike a synthetic Pi toolCall this does not
-	// re-execute edits, park the turn, or add tool results to model context.
-	if (engine === "acp") {
-		pi.registerEntryRenderer<NativeDisplayEvent>("agy-native-event", (entry, { expanded }, theme) => {
+	// titles and optional diffs. Registered unconditionally so ACP model turns can render.
+	pi.registerEntryRenderer<NativeDisplayEvent>("agy-native-event", (entry, { expanded }, theme) => {
 			const event = entry.data;
 			// Collapsed detail: most-specific signal wins (path, command, agy's own
 			// display text). The name is NOT a fallback here - it rendered "ls ls"
@@ -414,8 +413,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 				lines.push(theme.fg("dim", `${count} ${count === 1 ? "poll" : "polls"}, ${time(run.firstAt)} → ${time(run.lastAt)}`));
 			}
 			return new Text(lines.join("\n"), 0, 0);
-		});
-	}
+	});
 	let pendingNativeTools = 0;
 	const pollRuns = new PollRunFolder();
 	const closePollRun = (): void => {
@@ -430,7 +428,6 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		ui.setStatus(key, text === undefined ? undefined : ui.theme.fg("dim", text));
 	};
 	const onNativeEvent = (event: NativeDisplayEvent): void => {
-		if (engine !== "acp") return;
 		// Polls are bridge-local (never get a genuine Pi card); the mcpServer
 		// tag is unreliable on these frames, so the tool name discriminates.
 		if (event.name === POLL_TOOL_NAME) {
@@ -494,12 +491,13 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	// Pi's normal footer receives the incremental usage above. Mark the
 	// numbers as estimates in the status area too; ACP currently drops the
 	// SDK's exact usage metadata before it reaches the client.
-	if (engine === "acp") {
+	{
 		let lastUsageStatus = "";
 		pi.on("message_update", (event, ctx) => {
 			if (!ctx.hasUI || event.message.role !== "assistant" || event.message.provider !== "antigravity" || loadConfig().acp.usageEstimate === "off") return;
 			const { input, output } = event.message.usage;
-			const isAcp = isAcpCapableModel(event.message.model);
+			const { forcedEngine } = parseModelEngine(event.message.model);
+			const isAcp = forcedEngine === "acp" || (!forcedEngine && isAcpCapableModel(event.message.model));
 			const label = isAcp ? "ACP ≈" : "agy ≈";
 			const status = ctx.ui.theme.fg("dim", `${label} ${input} in / ${output} out`);
 			if (status !== lastUsageStatus) {
@@ -685,49 +683,15 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	// privileged API. Started on session_start, torn down on session_shutdown.
 	pi.on("session_start", async (event, ctx) => {
 		if (ctx.hasUI) activeUi = ctx.ui;
-		// First-run engine picker: ask once, on the first interactive start,
-		// which turn engine to use. Skipped headless (ctx.mode !== "tui"),
-		// when AGY_ENGINE is set, or once any config file exists (any save -
-		// even of an unrelated knob - means the user has been here before).
-		// esc = decide later: nothing is written, the picker reappears next
-		// start. Like /agy engine, the choice applies on the next start
-		// (drivers wire at load). The await intentionally runs before the
-		// bridge startup below: on a genuine first run the modal blocks input
-		// anyway, so the delay is invisible.
-		if (event.reason === "startup" && ctx.mode === "tui" && shouldOfferEnginePicker(CONFIG_PATH)) {
-			// Best-effort, like the legacy-patch notice below: a picker failure
-			// (mid-prompt TUI teardown, resize races) must never take down the
-			// rest of session_start - the MCP bridge startup included. The
-			// default engine keeps working untouched.
-			try {
-				const picked = await showEnginePicker(ctx.ui);
-				if (picked) {
-					saveConfig({ engine: picked });
-					ctx.ui.notify(savedEngineMessage(picked), "info");
-					if (picked === "acp") void runAcpPickSetup(ctx);
-				}
-			} catch (err) {
-				fileLog.log("engine-picker", { error: String(err) }, "warn");
-				console.error(`[antigravity-bridge] engine picker failed: ${String(err)}`);
-			}
-		}
-		// agy presence check (stream-json engine): the CLI is the whole engine,
-		// so a missing binary means every Antigravity turn would fail. Warn on
-		// every process start until it is installed (per-process flag so /new,
-		// /resume and /reload re-fires do not nag mid-session). Runs after the
-		// picker above, so a first-run stream-json pick warns immediately.
-		if (engine === "stream-json" && !agyMissingWarned && !isAgyInstalled(binary)) {
+		// agy presence check: warn if agy CLI binary is missing, since CLI variants require it.
+		if (!agyMissingWarned && !isAgyInstalled(binary)) {
 			agyMissingWarned = true;
 			const msg = agyMissingMessage();
 			if (ctx.hasUI) ctx.ui.notify(msg, "warning");
 			else console.error(`[antigravity-bridge] ${msg}`);
 		}
-		// Version gate (stream-json): an agy older than MIN_AGY_VERSION fails
-		// turns with raw stream errors that look like bridge bugs. Warn once
-		// with the fix in the message; doctor carries the full verdict.
-		// Development builds and unreadable output stay silent here (an agy
-		// from source works; doctor shows what we could not parse).
-		if (engine === "stream-json" && !agyVersionWarned && isAgyInstalled(binary)) {
+		// Version gate: an agy older than MIN_AGY_VERSION fails turns with raw stream errors.
+		if (!agyVersionWarned && isAgyInstalled(binary)) {
 			void checkAgyCliVersion(binary).then((check) => {
 				if (agyVersionWarned || check.status !== "unsupported") return;
 				agyVersionWarned = true;
@@ -753,11 +717,8 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		} catch {
 			/* detection is best-effort */
 		}
-		// ACP self-heal: engine=acp needs a server binary + auth. Silent when
-		// everything is ready; installs from the registry and bootstraps auth
-		// otherwise; manual instructions only on failure. Fire-and-forget: it
-		// must not delay session start (and nothing spawns until the first turn).
-		if (engine === "acp" && !acpSelfHealRan) {
+		// ACP self-heal: checks ACP server binary + auth if available.
+		if (!acpSelfHealRan) {
 			acpSelfHealRan = true;
 			void ensureAcpReady({ configBin: loadConfig().acp.bin }).then((status) => {
 				fileLog.log(
@@ -938,15 +899,14 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 			sweepStaleBridgeServers();
 			healBridgeSuppression();
 			// ACP supplies the bridge per-session (session/new | session/load);
-			// only the stream-json CLI reads the global MCP config.
-			if (engine === "stream-json") {
-				registerBridgeServer({
-					pid: process.pid,
-					port: r.handle.port,
-					token: r.handle.token,
-					tokenHeader: TOKEN_HEADER,
-				});
-			}
+			// stream-json CLI reads the global MCP config. Since models can run on CLI
+			// even when default engine is ACP, we always register the bridge server.
+			registerBridgeServer({
+				pid: process.pid,
+				port: r.handle.port,
+				token: r.handle.token,
+				tokenHeader: TOKEN_HEADER,
+			});
 			// --- Approval gate (docs/TODO.md 2.5) ------------------------------
 			// agy native tool calls pass through a pi-side approval: a PreToolUse
 			// hook parks in the bridge, the provider emits a shadow toolUse, and
@@ -1071,7 +1031,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 		// ("quit") - the connection kill is identical and nothing runs after.
 		await streamDriver.close("recycle", "session shutdown");
 		await acpDriver.close("recycle", "session shutdown");
-		if (engine === "stream-json") unregisterBridgeServer(process.pid);
+		unregisterBridgeServer(process.pid);
 		hiddenBridgeTools.clear();
 		// Approval gate: unstage hooks and remove the per-pid script. Pending
 		// approvals already failed closed via handle close (bridge shutdown deny).
@@ -1093,7 +1053,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	const emergencyCleanup = () => {
 		void streamDriver.close("recycle", "process exit", true);
 		void acpDriver.close("recycle", "process exit", true);
-		if (engine === "stream-json") unregisterBridgeServer(process.pid);
+		unregisterBridgeServer(process.pid);
 		if (gateScriptPath) {
 			try {
 				fs.rmSync(gateScriptPath, { force: true });

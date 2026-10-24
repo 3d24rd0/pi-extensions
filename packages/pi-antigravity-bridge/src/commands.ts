@@ -25,11 +25,7 @@ import {
 	type ThinkingTier,
 } from "./config.js";
 import {
-	ENGINE_SETTINGS_ROW_ID,
-	engineSettingsRow,
 	isAgyInstalled,
-	savedEngineMessage,
-	showEnginePicker,
 } from "./engine-picker.js";
 import { checkAgyCliVersion, describeAgyVersionCheck, MIN_AGY_VERSION } from "./agy-version.js";
 import { isValidAgyAgentName, listAgyAgents } from "./agents.js";
@@ -200,53 +196,7 @@ export function registerAgyCommand(pi: ExtensionAPI, ctx: AgyCommandCtx): void {
 				return;
 			}
 			if (sub === "engine") {
-				if (val === "acp" || val === "stream-json") {
-					if (val === "acp" && loadConfig().mode === "plan") {
-						ui?.notify("mode is plan; the ACP engine has no plan mode. /agy mode accept-edits first.", "warning");
-						return;
-					}
-					const next = saveConfig({ engine: val });
-					if (next.engine !== "acp") {
-						ui?.notify("engine set to stream-json. Takes effect on the next pi start (or /reload).", "info");
-						return;
-					}
-					// Self-service setup: install the server from the official
-					// registry and bootstrap auth now, so the restart just works.
-					// Manual instructions only when a step fails.
-					ui?.notify("engine set to acp. Preparing the server (binary + auth)…", "info");
-					const status = await ensureAcpReady({
-						configBin: loadConfig().acp.bin,
-						onProgress: (m) => ui?.notify(m, "info"),
-					});
-					ctx.fileLog.log(
-						"acp-setup",
-						status.ok
-							? { ok: true, binarySource: status.binarySource, needsLogin: status.needsLogin }
-							: { ok: false, error: status.error },
-						status.ok ? "info" : "warn",
-					);
-					if (!status.ok) {
-						ui?.notify(`ACP auto-setup failed (${status.error}).\n${status.manual}`, "warning");
-						return;
-					}
-					saveConfig({ acp: { ...loadConfig().acp, bin: status.bin } });
-					if (status.needsLogin) {
-						ui?.notify(
-							`ACP engine set. ${acpLoginPending()}`,
-							"warning",
-						);
-					} else {
-						ui?.notify(`ACP engine ready (auth: ${status.auth}). Takes effect on the next pi start (or /reload).`, "info");
-					}
-				} else if (!val && mode === "tui" && ui) {
-					// Same modal as the first-run wizard: switching engines deserves
-					// the explanations, not a bare usage line. Semantics match the
-					// direct path above: plan blocks acp, an acp pick chains setup
-					// + sign-in immediately, restart applies the switch.
-					await runEngineModal(ui, ctx);
-				} else {
-					ui?.notify(`current engine: ${loadConfig().engine}\nusage: /agy engine stream-json|acp`, "info");
-				}
+				ui?.notify("Models now declare their engine directly in the model name (e.g. gemini-4-argon-acp vs gemini-4-argon-cli). Use /model to switch engines.", "info");
 				return;
 			}
 			if (sub === "auth") {
@@ -810,9 +760,6 @@ async function openAgyPicker(ui: ExtensionUIContext, ctx: AgyCommandCtx): Promis
 	const pending: PendingConfig = {};
 
 	const rows: DialogRow[] = [
-		// Value-less action row: DialogMenu resolves the menu with this id on
-		// Enter (see runEngineModal below); every other row cycles in place.
-		engineSettingsRow(config.engine),
 		{
 			id: "mode",
 			label: "Execution mode",
@@ -954,7 +901,6 @@ async function openAgyPicker(ui: ExtensionUIContext, ctx: AgyCommandCtx): Promis
 	);
 
 	if (Object.keys(pending).length === 0) {
-		if (resolved === ENGINE_SETTINGS_ROW_ID) await runEngineModal(ui, ctx);
 		return;
 	}
 
@@ -998,30 +944,4 @@ async function openAgyPicker(ui: ExtensionUIContext, ctx: AgyCommandCtx): Promis
 			"error",
 		);
 	}
-
-	if (resolved === ENGINE_SETTINGS_ROW_ID) await runEngineModal(ui, ctx);
-}
-
-/** The engine-pick modal shared by /agy engine (no args) and the settings
- *  picker's engine row: the same explanations as the first-run wizard and the
- *  same semantics — plan blocks acp, an acp pick chains setup + sign-in
- *  immediately, restart applies the switch. */
-async function runEngineModal(ui: ExtensionUIContext, ctx: AgyCommandCtx): Promise<void> {
-	const current = loadConfig().engine;
-	const picked = await showEnginePicker(ui);
-	if (picked === undefined) {
-		ui.notify(`engine unchanged: ${current}.`, "info");
-		return;
-	}
-	if (picked === current) {
-		ui.notify(`engine is already ${current}. Restart applies it if set this session.`, "info");
-		return;
-	}
-	if (picked === "acp" && loadConfig().mode === "plan") {
-		ui.notify("mode is plan; the ACP engine has no plan mode. /agy mode accept-edits first.", "warning");
-		return;
-	}
-	saveConfig({ engine: picked });
-	ui.notify(savedEngineMessage(picked), "info");
-	if (picked === "acp") void ctx.runAcpPickSetup({ ui });
 }

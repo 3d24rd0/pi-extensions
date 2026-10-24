@@ -36,7 +36,7 @@ pi install git:github.com/3d24rd0/pi-extensions
 
 ## Packages & Dependencies
 
-- **`@estebanforge/pi-antigravity-bridge`**: Gemini provider for Pi on the Antigravity ACP server (official Google ACP) or the stream-json `agy` CLI. Supports `gemini-4-argon`, `gemini-3.8-flash`, and Claude 5.5 models with reasoning effort toggles, conversation token estimation, and the built-in `AskAntigravity` delegation tool.
+- **`@3d24rd0/pi-antigravity-bridge`**: Gemini provider for Pi on the Antigravity ACP server (official Google ACP) or the stream-json `agy` CLI. Supports `gemini-4-argon`, `gemini-3.8-flash`, and Claude 5.5 models with reasoning effort toggles, conversation token estimation, and the built-in `AskAntigravity` delegation tool.
 - **`@estebanforge/pi-tui-dialogs`**: Consumed directly from npm as a standard dependency (monitored via Dependabot).
 
 ## Development

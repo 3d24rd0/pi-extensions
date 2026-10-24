@@ -1,9 +1,6 @@
 # pi-antigravity-bridge
 
-A Gemini model provider **and** the `AskAntigravity` delegation tool for [pi](https://github.com/earendil-works/pi), built on Google's official Antigravity binaries: **Google's official ACP server** by default (new installs), with the `agy` CLI engine kept as the fallback. It registers `antigravity/gemini-*` models in pi's `/model` picker (streaming), and provides the `AskAntigravity` tool for one-shot delegation - the same combined shape as `pi-claude-bridge`.
-
-
-If you also have [`@estebanforge/pi-ask-antigravity`](https://github.com/EstebanForge/pi-extensions/tree/main/packages/pi-ask-antigravity) installed, this bridge takes over: pi-ask-antigravity detects the bridge and registers nothing, so the `AskAntigravity` tool is never duplicated.
+A Gemini model provider **and** the `AskAntigravity` delegation tool for [pi](https://github.com/earendil-works/pi), built on Google's official Antigravity binaries: **Google's official ACP server** or the stream-json `agy` CLI. It registers `antigravity/gemini-*` and Claude models in pi's `/model` picker with explicit engine tags (`-acp`, `-cli`), and provides the `AskAntigravity` tool for one-shot delegation.
 
 ## What it does
 
@@ -84,7 +81,7 @@ Full mechanics, configuration, and a sample gate extension: [docs/APPROVAL-GATE.
 Install with pi's package manager:
 
 ```bash
-pi install npm:@estebanforge/pi-antigravity-bridge
+pi install git:github.com/3d24rd0/pi-extensions
 ```
 
 Requires the **`agy` CLI** installed and authenticated. If you don't have it, follow Google's [official install guide](https://antigravity.google/docs/cli/install) for your platform, then run `agy` once to complete Google OAuth. The extension resolves `agy` on `$PATH`, or via the `AGY_BIN` environment variable. While the stream-json engine is active and the binary cannot be found, pi warns on every start (toast in the TUI, stderr headless) pointing at the install guide; the warning stops once the binary is detected.
