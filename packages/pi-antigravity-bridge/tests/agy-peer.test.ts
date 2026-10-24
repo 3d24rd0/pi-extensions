@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
 	buildAgyArgs,
 	buildFinalPrompt,
+	buildTimeBudgetNotice,
+	compareVersionsDesc,
 	CONV_ID_RE,
 	filterHiddenModels,
 	levelToTier,
@@ -16,13 +18,7 @@ import {
 	resolveAgyModel,
 	snapshotConversations,
 	type ModelEntry,
-} from "../src/peers/antigravity.js";
-
-// Characterization suite for the Antigravity (agy) peer adapter, ported from
-// pi-ask-antigravity before its extension refactored onto this module. Pins:
-// the `agy models` line grammar, tiered alias resolution, the plan-mode
-// prompt guards, the argv contract (--print-timeout, plan-run flag filter),
-// and the SQLite conversation-id discovery technique.
+} from "../src/agy-peer.js";
 
 const entry = (full: string, tier: ModelEntry["tier"] = null): ModelEntry => {
 	const lower = full.toLowerCase();
@@ -34,6 +30,33 @@ const entry = (full: string, tier: ModelEntry["tier"] = null): ModelEntry => {
 		tier,
 	};
 };
+
+describe("compareVersionsDesc", () => {
+	it("ranks 5.10 above 5.9 (lexical sort would invert)", () => {
+		expect(compareVersionsDesc("5.9", "5.10")).toBeGreaterThan(0);
+		expect(compareVersionsDesc("5.10", "5.9")).toBeLessThan(0);
+	});
+
+	it("returns 0 for equal versions and pads missing segments", () => {
+		expect(compareVersionsDesc("6.1", "6.1")).toBe(0);
+		expect(compareVersionsDesc("1.0", "1.0.1")).toBeGreaterThan(0);
+		expect(compareVersionsDesc("1.0", "1.0.0")).toBe(0);
+	});
+});
+
+describe("buildTimeBudgetNotice", () => {
+	it("formats minute-scale budgets with the task framing", () => {
+		const out = buildTimeBudgetNotice(10 * 60_000);
+		expect(out).toContain("[TIME BUDGET]");
+		expect(out).toContain("about 10 minutes");
+	});
+
+	it("formats sub-two-minute budgets in seconds and returns empty under 1s", () => {
+		expect(buildTimeBudgetNotice(45_000)).toContain("about 45 seconds");
+		expect(buildTimeBudgetNotice(999)).toBe("");
+		expect(buildTimeBudgetNotice(0)).toBe("");
+	});
+});
 
 describe("parseModelLine", () => {
 	it("parses the two-column `agy models` shape, keeping only the slug", () => {
@@ -49,7 +72,6 @@ describe("parseModelLine", () => {
 			version: "4",
 			tier: "high",
 		});
-		// Bare-slug line (no label column) splits to itself.
 		expect(parseModelLine("claude-opus-5-5-high")).toEqual({
 			full: "claude-opus-5-5-high",
 			family: "other",
@@ -69,11 +91,9 @@ describe("catalog helpers", () => {
 
 	it("merges the static overlay; live entries win per exact slug, others fill in", () => {
 		const merged = mergeCatalog([entry("CLAUDE-SONNET-5-5-LOW")]);
-		// The live entry suppresses ONLY its exact overlay twin (case-insensitive);
-		// the other tier variants and opus still come from the overlay.
 		const low = merged.filter((e) => e.full.toLowerCase() === "claude-sonnet-5-5-low");
 		expect(low.length).toBe(1);
-		expect(low[0]!.full).toBe("CLAUDE-SONNET-5-5-LOW"); // live casing kept
+		expect(low[0]!.full).toBe("CLAUDE-SONNET-5-5-LOW");
 		expect(merged.some((e) => e.full === "claude-sonnet-5-5-medium")).toBe(true);
 		expect(merged.some((e) => e.full === "claude-opus-5-5-low")).toBe(true);
 	});
@@ -133,8 +153,6 @@ describe("resolveModel", () => {
 			model: "gemini-3.6-flash",
 			effort: "low",
 		});
-		// An embedded tier the family lacks is CLAMPED to the nearest real
-		// tier (3.5 flash ships low/medium only; high clamps to medium).
 		expect(resolveAgyModel("3.5 flash high", catalog, "medium")).toEqual({
 			model: "gemini-3.5-flash",
 			effort: "medium",
@@ -213,8 +231,6 @@ describe("buildAgyArgs", () => {
 		expect(buildAgyArgs({ ...base, skipPermissions: false })).not.toContain(
 			"--dangerously-skip-permissions",
 		);
-		// Plan NEVER gets the flag, even when enabled: upstream writes are not
-		// gated under plan mode, so an auto-approved plan run is write-capable.
 		expect(buildAgyArgs({ ...base, mode: "plan" })).not.toContain("--dangerously-skip-permissions");
 	});
 
@@ -226,7 +242,6 @@ describe("buildAgyArgs", () => {
 		});
 		expect(args).toContain("--sandbox");
 		expect(args).not.toContain("--dangerously-skip-permissions");
-		// accept-edits passes env extras through unfiltered.
 		const plain = buildAgyArgs({ ...base, extraArgs: ["--sandbox"] });
 		expect(plain).toContain("--sandbox");
 	});
@@ -275,10 +290,7 @@ describe("conversation discovery", () => {
 		writeFileSync(join(dir, "a.db"), "");
 		writeFileSync(join(dir, "b.db"), "");
 		expect(newConversationId(dir, before)).toBeNull();
-		// With a resolver that positively identifies one AND the spawned pid
-		// (the resolver only engages alongside a pid), the pick is exact.
 		expect(newConversationId(dir, before, { pid: 1, resolveOpenDb: () => "b" })).toBe("b");
-		// A resolver naming an id outside the candidate set fails safe.
 		expect(newConversationId(dir, before, { pid: 1, resolveOpenDb: () => "old" })).toBeNull();
 	});
 
@@ -290,23 +302,18 @@ describe("conversation discovery", () => {
 	});
 
 	it("signals onAmbiguous only when ids appeared but the bind stayed unresolved", () => {
-		// pi-antigravity-bridge's tested hook: callers bound their retry budget
-		// to the genuinely-ambiguous case, not to the ordinary not-yet case.
 		const dir = mkdtempSync(join(tmpdir(), "agy-conv-"));
 		const before = snapshotConversations(dir);
 		let calls = 0;
 		const count = () => calls++;
 
-		// Nothing new yet: not ambiguous.
 		newConversationId(dir, before, { onAmbiguous: count });
 		expect(calls).toBe(0);
 
-		// Exactly one new id binds cleanly: not ambiguous.
 		writeFileSync(join(dir, "ours.db"), "");
 		expect(newConversationId(dir, before, { onAmbiguous: count })).toBe("ours");
 		expect(calls).toBe(0);
 
-		// Several new ids, resolver empty: ambiguous and unresolved.
 		writeFileSync(join(dir, "a.db"), "");
 		writeFileSync(join(dir, "b.db"), "");
 		expect(
@@ -314,7 +321,6 @@ describe("conversation discovery", () => {
 		).toBeNull();
 		expect(calls).toBe(1);
 
-		// Resolver succeeds: resolved, not ambiguous.
 		expect(
 			newConversationId(dir, before, { pid: 1, resolveOpenDb: () => "b", onAmbiguous: count }),
 		).toBe("b");
@@ -322,7 +328,6 @@ describe("conversation discovery", () => {
 	});
 
 	it("procTreeOpenDbResolver refuses to guess outside its contract", () => {
-		// <=1 candidate: nothing to disambiguate.
 		expect(procTreeOpenDbResolver(1, os.tmpdir(), new Set())).toBeNull();
 		expect(procTreeOpenDbResolver(1, os.tmpdir(), new Set(["only"]))).toBeNull();
 	});

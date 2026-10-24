@@ -13,7 +13,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test, vi } from "vitest";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { buildFinalPrompt, resolveAgyModel } from "@estebanforge/pi-ask-shared";
+import { buildFinalPrompt, resolveAgyModel } from "../src/agy-peer.js";
 import { reviewerAgentMd, stageReviewerAgent, toolModelsFromRaw } from "../src/ask-tool.js";
 import { parseAgentFrontmatter } from "./helpers/frontmatter.js";
 import { toAgyEffort } from "../src/models.js";

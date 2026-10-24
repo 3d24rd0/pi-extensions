@@ -35,7 +35,7 @@ import {
 	snapshotConversations,
 	type ModelEntry,
 	type Mode,
-} from "@estebanforge/pi-ask-shared";
+} from "./agy-peer.js";
 import { loadConfig, type AgyMode, type ThinkingTier } from "./config.js";
 import { redactText } from "./redact.js";
 import { acquireBridgeSuppression } from "./mcp-registration.js";
@@ -104,7 +104,7 @@ function extraArgs(): string[] {
 // PLAN_HEADLESS_GUARD / AGENT_REVIEW_GUARD / buildFinalPrompt live in
 // pi-ask-shared (peers/antigravity.ts); the bridge inherits the identical
 // guard discipline. Re-exported for the bridge's own tests.
-export { AGENT_REVIEW_GUARD, buildFinalPrompt, PLAN_HEADLESS_GUARD } from "@estebanforge/pi-ask-shared";
+export { AGENT_REVIEW_GUARD, buildFinalPrompt, PLAN_HEADLESS_GUARD } from "./agy-peer.js";
 
 // --- Plan-mode reviewer agent ----------------------------------------------
 

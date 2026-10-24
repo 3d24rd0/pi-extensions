@@ -1,23 +1,63 @@
 /**
  * Antigravity (agy) CLI peer adapter: the agy-specific domain knowledge
- * shared by pi-ask-antigravity, pi-antigravity-bridge's ask-tool, and
- * (later) pi-peer-review consults. Extracted verbatim from pi-ask-antigravity's
- * extensions/index.ts (behavior-preserving).
+ * used by pi-antigravity-bridge's ask-tool.
  *
  * Scope: the `agy models` line grammar, tiered alias resolution, plan-mode
- * prompt guards, argv construction for `agy -p`, and the SQLite
- * conversation-id discovery technique. Orchestration (registry, wake, UI,
- * config, reviewer-agent staging) stays in the extension.
- *
- * TRANSPORT NOTE: agy is a RAW-output peer (no line protocol): the answer
- * is the full stdout, trimmed. runProcess runs in raw mode (no onLine) and
- * callers stream progress via onChunk.
+ * prompt guards, argv construction for `agy -p`, the SQLite conversation-id
+ * discovery technique, version comparison, and wall-clock time-budget notices.
  */
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { compareVersionsDesc } from "../versions.js";
+
+// --- Constants & Limits -----------------------------------------------------
+
+/** setTimeout's hard ceiling: Node clamps anything above 2^31-1 ms to 1ms,
+ * which would kill the peer instantly. */
+export const MAX_TIMEOUT_MS = 2_147_483_647;
+/** The same ceiling expressed in minutes for callers that think in minutes. */
+export const MAX_TIMEOUT_MINUTES = Math.floor(MAX_TIMEOUT_MS / 60_000);
+
+// --- Version compare & Time budget ------------------------------------------
+
+/**
+ * Descending numeric version compare. "5.10" > "5.9" (lexical sort would
+ * wrongly rank "5.9" higher because '9' > '1'). Callers pass numeric dotted
+ * segments only ("6.1"), never full model slugs.
+ */
+export function compareVersionsDesc(a: string, b: string): number {
+	const pa = a.split(".").map(Number);
+	const pb = b.split(".").map(Number);
+	for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+		const da = pa[i] ?? 0;
+		const db = pb[i] ?? 0;
+		if (da !== db) return db - da; // descending
+	}
+	return 0;
+}
+
+/**
+ * Tell a spawned peer its wall-clock budget so it can pace toward a complete
+ * answer instead of being killed mid-task by the watchdog. Models have no
+ * clock, so this buys scope pacing, not timekeeping. Magnitude-based:
+ * sub-two-minute budgets get a direct-answer framing (read-only consults),
+ * longer ones get the complete-answer-or-subset framing. Empty for absent
+ * caps and anything under one second, which the watchdog would turn into an
+ * instant kill - callers guard those separately.
+ */
+export function buildTimeBudgetNotice(timeoutMs: number): string {
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return "";
+	if (timeoutMs < 1000) {
+		return "";
+	}
+	if (timeoutMs < 120_000) {
+		const sec = Math.floor(timeoutMs / 1000);
+		return `[TIME BUDGET] You have about ${sec} ${sec === 1 ? "second" : "seconds"}. The run is terminated at the limit and you may be cut off mid-task. Provide a direct, concise final answer immediately.`;
+	}
+	const min = Math.floor(timeoutMs / 60_000);
+	return `[TIME BUDGET] You have about ${min} minutes of wall-clock time. The run is terminated at the limit and you may be cut off mid-task. Deliver a complete final answer before it; if the task cannot fit, deliver the most valuable complete subset and state what remains.`;
+}
 
 // --- Types -----------------------------------------------------------------
 
@@ -218,15 +258,7 @@ export function resolveAgyModel(
 	const exact = entries.find((e) => e.full.toLowerCase() === lower);
 	if (exact) return toResolved(exact.full, exact.tier);
 
-	// 1b. Static short alias ("sonnet" / "opus"). Checked
-	//     before the family parser because none of these names contain
-	//     "flash" or "argon" and would otherwise return null below. The
-	//     resolved full string is then re-validated against the catalog
-	//     in step 1's second pass on the next call, so renaming the
-	//     overlay entry in code still wins on exact-string match.
-	//     The case-insensitive lookup matches mergeCatalog's dedup logic
-	//     so the "live entries win" guarantee holds even when agy lists
-	//     the model under different casing than the overlay.
+	// 1b. Static short alias ("sonnet" / "opus").
 	if (STATIC_SHORT_ALIAS.has(lower)) {
 		return resolveTieredBase(
 			STATIC_SHORT_ALIAS.get(lower) as string,
@@ -252,10 +284,6 @@ export function resolveAgyModel(
 		family = "flash";
 	}
 	if (!family) {
-		// A bare base slug the provider itself advertises ("claude-sonnet-5-5",
-		// the id behind the antigravity/ entry in pi's picker) is invalid
-		// upstream without an effort: resolve it to the nearest tier variant
-		// exactly like the short aliases.
 		if (
 			entries.some((e) => e.full.toLowerCase().startsWith(`${lower}-`)) ||
 			entries.some((e) => e.full.toLowerCase() === lower)
@@ -269,21 +297,11 @@ export function resolveAgyModel(
 	let candidates = entries.filter((e) => e.family === family);
 	if (candidates.length === 0) return null;
 
-	// 4. Pin version if specified; otherwise pick the HIGHEST version
-	//    (numeric compare, not lexical — see compareVersionsDesc in
-	//    versions.ts).
+	// 4. Pin version if specified; otherwise pick the HIGHEST version.
 	if (version) {
 		const versioned = candidates.filter((e) => e.version === version);
 		if (versioned.length > 0) candidates = versioned;
 	} else {
-		// Prefer Google's official `gemini-*-latest` aliases (entries with no
-		// parseable version in their name, e.g. "Gemini Flash Latest") when
-		// the user did NOT pin a specific version. The alias is the
-		// versionless pointer Google intends for "the current release" and
-		// hot-swaps on every release, while versioned entries like
-		// "Gemini 3.6 Flash (Medium)" stay available via explicit pinning
-		// (e.g. "3.6 flash medium"). Falls back to the highest versioned
-		// entry if no alias is present in the catalog.
 		const aliases = candidates.filter((e) => e.version === null);
 		if (aliases.length > 0) {
 			candidates = aliases;
@@ -305,7 +323,7 @@ export function resolveAgyModel(
 	const familyTiers = new Set(
 		candidates.map((e) => e.tier).filter((t): t is ThinkingTier => t !== null),
 	);
-	if (familyTiers.size === 0) return toResolved(candidates[0].full, null); // no tiers on any entry
+	if (familyTiers.size === 0) return toResolved(candidates[0].full, null);
 
 	const preferred =
 		preferredTier ??
@@ -316,19 +334,8 @@ export function resolveAgyModel(
 	return toResolved(picked.full, picked.tier);
 }
 
-/** Descending numeric version compare. "3.10" > "3.9" (lexical sort would
- *  wrongly rank "3.9" higher because '9' > '1'). Shared primitive (versions.ts). */
-
 // --- Prompt assembly -------------------------------------------------------
 
-/** Appended to every headless plan-mode prompt. `agy -p` cannot answer
- *  permission prompts: in plan mode a run_command attempt is soft-denied and
- *  the turn ends AT the denial (exit 0, empty stdout, notice only on stderr -
- *  the empty-output branch in execute). Probed 2026-09-28 on agy 1.2.12:
- *  allow rules ARE consulted (a verbatim allow-listed `git log` runs), but
- *  --sandbox does NOT relax the command gate, so the only input every user
- *  is guaranteed is the prompt itself. The guard steers the model to answer
- *  from that material. accept-edits runs keep their tools and never get it. */
 export const PLAN_HEADLESS_GUARD = [
 	"",
 	"--- Headless session constraints ---",
@@ -337,13 +344,6 @@ export const PLAN_HEADLESS_GUARD = [
 	"- If information you need is missing, state exactly what is missing in your answer instead of trying to fetch it.",
 ].join("\n");
 
-/** Guard for plan runs backed by the restricted reviewer agent. Difference
- *  to PLAN_HEADLESS_GUARD: read commands are the intended analysis path
- *  here, so the guard forbids FILE MUTATION - by tool or by shell - and
- *  keeps the answer-from-material discipline. The agent is a damper, not
- *  enforcement (upstream #1181); a headless command attempt can still be
- *  auto-denied, which ends the run, so the guard steers toward view_file
- *  and staged material first. */
 export const AGENT_REVIEW_GUARD = [
 	"",
 	"--- Review constraints ---",
@@ -352,17 +352,10 @@ export const AGENT_REVIEW_GUARD = [
 	"- Work from the material provided in this prompt; if information you need is missing, state exactly what is missing in your answer.",
 ].join("\n");
 
-/** Assemble the prompt sent to agy: digest marker first (existing behavior),
- *  then the caller's prompt, then the plan-mode guard last - the position
- *  the model reads with the most recency. No user-config mutation: this is
- *  the only plan-mode lever the tool itself owns. */
 export function buildFinalPrompt(
 	prompt: string,
 	mode: Mode,
 	digest: boolean,
-	/** True when the restricted reviewer agent is staged: its empty edit
-	 *  toolset is a damper (the CLI does not enforce review-only, upstream
-	 *  #1181), so the prompt may ALLOW read-only commands. */
 	agentDamper = false,
 ): string {
 	let out = digest ? `(Use compact digests, not full file contents.)\n${prompt}` : prompt;
@@ -372,42 +365,23 @@ export function buildFinalPrompt(
 
 // --- Argv building ----------------------------------------------------------
 
-// agy conversation ids are UUID DB-stems (e.g. "9e6fdc2f-f9f9-4096-95fc-7852528b50cc").
-// Reject anything that isn't, so a leading-dash value can't misbind on agy's
-// arg parser as the token after --conversation. First char must be
-// alphanumeric (rejects leading-dash flag injection); hyphens allowed in the
-// body because real UUIDs contain them.
 export const CONV_ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,127}$/;
 
 export interface BuildAgyArgsOptions {
 	cwd: string;
-	/** Resolved --model/--effort pair; an empty model omits both flags
-	 *  (unverified input passes through by NOT being set here). */
 	resolved: ResolvedModel;
 	mode: Mode;
-	/** Staged reviewer agent for plan runs; omitted for headless plan. */
 	reviewerAgentName?: string | null;
-	/** Shared permissions setting; the flag NEVER lands on plan runs. */
 	skipPermissions: boolean;
-	/** Continuation conversation id; must already pass CONV_ID_RE. */
 	conversationId?: string | null;
 	timeoutMinutes: number;
-	/** Extra --add-dir entries (context exports); appended after cwd. */
 	addDirs?: string[];
-	/** Pre-split env extras (AGY_EXTRA_ARGS); plan runs strip the skip flag. */
 	extraArgs: string[];
 	prompt: string;
 }
 
-/** Build the `agy` argv for a `-p` run. Pure function so tests can pin the
- *  shape. The prompt travels as the trailing positional after -p. */
 export function buildAgyArgs(opts: BuildAgyArgsOptions): string[] {
 	const args: string[] = ["--add-dir", opts.cwd];
-	// Fail-closed on every plan run: AGY_EXTRA_ARGS lands before the mode
-	// flags, so an env-injected skip flag would re-arm exactly what the
-	// never-flag-on-plan rule withholds (upstream #1181: an auto-approved
-	// plan run is write-capable). The reviewer agent is a damper, not a
-	// license for the flag.
 	const extra =
 		opts.mode === "plan"
 			? opts.extraArgs.filter((a) => !a.startsWith("--dangerously-skip-permissions"))
@@ -417,17 +391,6 @@ export function buildAgyArgs(opts: BuildAgyArgsOptions): string[] {
 	if (opts.resolved.effort) args.push("--effort", opts.resolved.effort);
 	args.push("--mode", opts.mode);
 	if (opts.reviewerAgentName) args.push("--agent", opts.reviewerAgentName);
-	// accept-edits auto-approves file edits but NOT shell commands, so a
-	// run_command would hang on an unanswerable y/n prompt in non-interactive
-	// -p mode. Honor the shared permissions setting (same knob as the bridge).
-	// Plan runs NEVER get the flag: it auto-approves every permission
-	// request, and the CLI does not gate writes under plan mode (upstream
-	// google-antigravity/antigravity-cli#1181, probed 2026-10-07), so an
-	// auto-approved plan run is a write-capable run. The reviewer agent's
-	// toolset is a damper, not a guarantee; the 2026-09-28 "safe with the
-	// restricted toolset" probe predates the #1181 evidence. Without the
-	// flag, command attempts fail visibly (headless auto-deny) instead of
-	// running approved.
 	if (opts.skipPermissions && opts.mode !== "plan") {
 		args.push("--dangerously-skip-permissions");
 	}
@@ -439,10 +402,7 @@ export function buildAgyArgs(opts: BuildAgyArgsOptions): string[] {
 	return args;
 }
 
-// --- Conversation discovery (the one technique borrowed from antigravity-acp) --
-// agy -p does NOT print the conversation id, so for a fresh prompt we snapshot
-// the conversations dir before spawn and pick the single new .db after. For a
-// continued call we pass --conversation <id> and agy reuses it (no new file).
+// --- Conversation discovery ------------------------------------------------
 
 export const CONVERSATIONS_DIR =
 	process.env.AGY_CONVERSATIONS_DIR ||
@@ -463,11 +423,6 @@ export function snapshotConversations(dir: string): Set<string> {
 	return out;
 }
 
-/** Resolve which of the `candidates` DB ids is held open by the process tree
- *  rooted at `rootPid`. Used to disambiguate concurrent agy runs. Returns the
- *  single matching id, or null when none/several are open or /proc is
- *  unavailable. Ported from pi-antigravity-bridge src/discovery.ts; keep in
- *  sync. */
 export type OpenDbResolver = (
 	rootPid: number,
 	dir: string,
@@ -525,8 +480,6 @@ function safeRealpath(p: string): string | null {
 	}
 }
 
-/** The /proc FD-scan resolver shared by all agy peers. Exported so the
- *  bridge's disambiguation tests exercise the exact implementation runs use. */
 export const procTreeOpenDbResolver: OpenDbResolver = (rootPid, dir, candidates) => {
 	if (candidates.size <= 1) return null;
 	if (process.platform !== "linux") return null;
@@ -561,16 +514,9 @@ export const procTreeOpenDbResolver: OpenDbResolver = (rootPid, dir, candidates)
 interface BindOptions {
 	pid?: number;
 	resolveOpenDb?: OpenDbResolver;
-	/** Called only when new ids appeared but the bind stayed unresolved —
-	 *  lets callers bound their retry budget to the genuinely-ambiguous case
-	 *  (bridge semantics, absorbed verbatim with discovery.ts). */
 	onAmbiguous?: () => void;
 }
 
-/** Find the conversation id created since `before`. Returns null when none
- *  appeared, or when several appeared and we cannot tie one to our process.
- *  Pass `opts.pid` (the spawned agy) to enable concurrent-run disambiguation
- *  via the process-tree FD scan. */
 export function newConversationId(
 	dir: string,
 	before: Set<string>,
@@ -579,8 +525,6 @@ export function newConversationId(
 	const created = [...snapshotConversations(dir)].filter((id) => !before.has(id));
 	if (created.length === 0) return null;
 	if (created.length === 1) return created[0] ?? null;
-	// Ambiguous: try to authoritatively identify ours via the spawned
-	// process's open files. Fail safe to null when we can't pick exactly one.
 	if (opts.pid !== undefined) {
 		const resolve = opts.resolveOpenDb ?? procTreeOpenDbResolver;
 		const hit = resolve(opts.pid, dir, new Set(created));
