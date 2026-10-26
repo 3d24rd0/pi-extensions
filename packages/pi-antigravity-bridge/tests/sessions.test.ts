@@ -23,20 +23,25 @@ test("SessionStore: missing file starts empty (no throw)", () => {
 	assert.equal(store.get("anything"), null);
 });
 
-test("SessionStore: load drops malformed entries, keeps valid ones", () => {
+test("SessionStore: load drops malformed entries, keeps valid ones (incl. modelId)", () => {
 	const p = tmpStorePath();
 	fs.writeFileSync(
 		p,
 		JSON.stringify({
-			good: { conversationId: "abc-123", lastStepIdx: 5 },
+			good: { conversationId: "abc-123", lastStepIdx: 5, modelId: "claude-sonnet-4-6" },
 			badId: { conversationId: 123, lastStepIdx: 2 }, // id not a string -> drop
-			badIdx: { conversationId: "xyz", lastStepIdx: "no" }, // idx not a number -> keep, -1
+			badIdx: { conversationId: "xyz", lastStepIdx: "no", modelId: 123 }, // idx not a number, modelId not a string
 			nonObj: "string-value", // not an object -> drop
 			missing: { lastStepIdx: 3 }, // no conversationId -> drop
 		}) + "\n",
 	);
 	const store = new SessionStore(p);
-	assert.deepEqual(store.get("good"), { conversationId: "abc-123", lastStepIdx: 5, lastMessageCount: 0 });
+	assert.deepEqual(store.get("good"), {
+		conversationId: "abc-123",
+		lastStepIdx: 5,
+		lastMessageCount: 0,
+		modelId: "claude-sonnet-4-6",
+	});
 	assert.equal(store.get("badId"), null);
 	assert.deepEqual(store.get("badIdx"), { conversationId: "xyz", lastStepIdx: -1, lastMessageCount: 0 });
 	assert.equal(store.get("nonObj"), null);
@@ -51,10 +56,15 @@ test("SessionStore: non-finite lastStepIdx (Infinity from 1e999) falls back to -
 	assert.deepEqual(store.get("huge"), { conversationId: "big", lastStepIdx: -1, lastMessageCount: 0 });
 });
 
-test("SessionStore: set/get round-trip in memory (incl. lastMessageCount watermark)", () => {
+test("SessionStore: set/get round-trip in memory (incl. lastMessageCount watermark and modelId)", () => {
 	const store = new SessionStore(tmpStorePath());
-	store.set("k", { conversationId: "c-1", lastStepIdx: 9, lastMessageCount: 42 });
-	assert.deepEqual(store.get("k"), { conversationId: "c-1", lastStepIdx: 9, lastMessageCount: 42 });
+	store.set("k", { conversationId: "c-1", lastStepIdx: 9, lastMessageCount: 42, modelId: "gemini-3.8-flash" });
+	assert.deepEqual(store.get("k"), {
+		conversationId: "c-1",
+		lastStepIdx: 9,
+		lastMessageCount: 42,
+		modelId: "gemini-3.8-flash",
+	});
 	assert.equal(store.size, 1);
 });
 

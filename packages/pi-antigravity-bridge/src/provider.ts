@@ -480,7 +480,7 @@ async function runTurnDriver(
 
 	const cwd = (options as { cwd?: string } | undefined)?.cwd ?? process.cwd();
 	const key = sessionKey(options, cwd, deps.engine);
-	const existing = store.get(key);
+	let existing = store.get(key);
 	const messageCount = context.messages.length;
 	const config = loadConfig();
 
@@ -549,6 +549,33 @@ async function runTurnDriver(
 	const entry = entries.find((e) => e.id === baseId || e.id === model.id) ?? null;
 	const agyModel = entry?.full ?? baseId;
 	const effort = entry?.efforts?.length ? toAgyEffort(options?.reasoning, entry.efforts) : undefined;
+
+	if (!isContinuation && existing) {
+		const modelChanged = existing.modelId !== undefined && existing.modelId !== agyModel;
+		const sessionCompacted =
+			existing.lastMessageCount !== undefined &&
+			existing.lastMessageCount > 0 &&
+			messageCount < existing.lastMessageCount;
+		if (modelChanged || sessionCompacted) {
+			deps.log?.(
+				"session-rotated",
+				{
+					reason: modelChanged ? "model-changed" : "session-compacted",
+					previousModel: existing.modelId,
+					currentModel: agyModel,
+					previousMessageCount: existing.lastMessageCount,
+					currentMessageCount: messageCount,
+					conversationId: existing.conversationId,
+				},
+				"info",
+			);
+			store.delete(key);
+			if (existing.conversationId) {
+				stagedAgentByConversation.delete(existing.conversationId);
+			}
+			existing = null;
+		}
+	}
 
 	let handle: TurnHandle | undefined;
 	// Name of the carrier agent staged for THIS turn's fresh conversation, if
@@ -805,6 +832,7 @@ async function runTurnDriver(
 				conversationId: outcome.conversationId,
 				lastStepIdx: -1,
 				lastMessageCount: messageCount,
+				modelId: agyModel,
 			});
 			if (stagedAgentName) stagedAgentByConversation.set(outcome.conversationId, stagedAgentName);
 		}

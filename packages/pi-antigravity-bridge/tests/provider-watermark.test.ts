@@ -95,7 +95,10 @@ function harness(outcomes: FakeOutcome[]): Harness {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agy-watermark-"));
 	const store = new SessionStore(path.join(dir, "sessions.json"));
 	const streamSimple = createStreamSimple({
-		entries: [{ id: "gemini-flash", full: "gemini-3.6-flash" }],
+		entries: [
+			{ id: "gemini-flash", full: "gemini-3.6-flash" },
+			{ id: "claude-sonnet", full: "claude-sonnet-4-6" },
+		],
 		store,
 		driver,
 		roundTrips: new ToolRoundTrips(driver),
@@ -103,9 +106,9 @@ function harness(outcomes: FakeOutcome[]): Harness {
 	return { seen, streamSimple, store, storePath: path.join(dir, "sessions.json"), dir };
 }
 
-async function runTurn(h: Harness, messages: string[], systemPrompt?: string): Promise<void> {
+async function runTurn(h: Harness, messages: string[], systemPrompt?: string, m?: Model<Api>): Promise<void> {
 	const stream = h.streamSimple(
-		model,
+		m ?? model,
 		contextWith(messages, systemPrompt),
 		{ cwd: h.dir } as unknown as SimpleStreamOptions,
 	);
@@ -127,9 +130,16 @@ function withEnv(values: Record<string, string>, fn: () => Promise<void>): Promi
 }
 
 /** Wait for the queued persist chain to land, then read the file. */
-async function readDisk(storePath: string): Promise<Record<string, unknown>> {
+async function readDisk(
+	storePath: string,
+	predicate?: (disk: Record<string, unknown>) => boolean,
+): Promise<Record<string, unknown>> {
 	return vi.waitFor(() => {
-		return JSON.parse(fs.readFileSync(storePath, "utf8")) as Record<string, unknown>;
+		const disk = JSON.parse(fs.readFileSync(storePath, "utf8")) as Record<string, unknown>;
+		if (predicate && !predicate(disk)) {
+			throw new Error("disk state does not match expected predicate yet");
+		}
+		return disk;
 	});
 }
 
@@ -308,4 +318,67 @@ test("aborted turn on the same conversation: watermark is not advanced", async (
 			fs.rmSync(h.dir, { recursive: true, force: true });
 		}
 	});
+});
+
+test("model switch rotates the conversation: old session is dropped and fresh conversation starts", async () => {
+	const claudeModel: Model<Api> = {
+		...model,
+		id: "claude-sonnet",
+		name: "Claude Sonnet",
+	};
+	const h = harness(["conv-gemini", "conv-claude"]);
+	try {
+		await runTurn(h, ["first task"], undefined, model);
+		assert.equal(h.seen.opts?.conversationId, null);
+		const disk1 = await readDisk(h.storePath, (d) => {
+			const rec = Object.values(d)[0] as { conversationId?: string } | undefined;
+			return rec?.conversationId === "conv-gemini";
+		});
+		const rec1 = Object.values(disk1)[0] as { conversationId: string; modelId: string };
+		assert.equal(rec1.conversationId, "conv-gemini");
+		assert.equal(rec1.modelId, "gemini-3.6-flash");
+
+		// Turn 2 switches to claude:
+		await runTurn(h, ["first task", "second task"], undefined, claudeModel);
+		// Must not pass conv-gemini:
+		assert.equal(h.seen.opts?.conversationId, null);
+		const disk2 = await readDisk(h.storePath, (d) => {
+			const rec = Object.values(d)[0] as { conversationId?: string } | undefined;
+			return rec?.conversationId === "conv-claude";
+		});
+		const rec2 = Object.values(disk2)[0] as { conversationId: string; modelId: string };
+		assert.equal(rec2.conversationId, "conv-claude");
+		assert.equal(rec2.modelId, "claude-sonnet-4-6");
+	} finally {
+		fs.rmSync(h.dir, { recursive: true, force: true });
+	}
+});
+
+test("session compaction rotates the conversation: old session is dropped", async () => {
+	const h = harness(["conv-long", "conv-compacted"]);
+	try {
+		await runTurn(h, ["m1", "m2", "m3", "m4", "m5"], undefined, model);
+		assert.equal(h.seen.opts?.conversationId, null);
+		const disk1 = await readDisk(h.storePath, (d) => {
+			const rec = Object.values(d)[0] as { conversationId?: string } | undefined;
+			return rec?.conversationId === "conv-long";
+		});
+		const rec1 = Object.values(disk1)[0] as { conversationId: string; lastMessageCount: number };
+		assert.equal(rec1.conversationId, "conv-long");
+		assert.equal(rec1.lastMessageCount, 5);
+
+		// Turn 2: Pi compacted the history down to 2 messages:
+		await runTurn(h, ["summary", "new question"], undefined, model);
+		// Must rotate: conversationId must NOT be conv-long
+		assert.equal(h.seen.opts?.conversationId, null);
+		const disk2 = await readDisk(h.storePath, (d) => {
+			const rec = Object.values(d)[0] as { conversationId?: string } | undefined;
+			return rec?.conversationId === "conv-compacted";
+		});
+		const rec2 = Object.values(disk2)[0] as { conversationId: string; lastMessageCount: number };
+		assert.equal(rec2.conversationId, "conv-compacted");
+		assert.equal(rec2.lastMessageCount, 2);
+	} finally {
+		fs.rmSync(h.dir, { recursive: true, force: true });
+	}
 });

@@ -29,6 +29,9 @@ export interface AgySession {
 	 *  fresh or pre-watermark session. Optional for backward compat with older
 	 *  persisted sessions that predate the watermark. */
 	lastMessageCount?: number;
+	/** agy model slug (e.g. "gemini-3.8-flash") that created the conversation.
+	 *  A model switch rotates the conversation to avoid mismatched backend quota. */
+	modelId?: string;
 }
 
 type StoreMap = Record<string, AgySession>;
@@ -48,10 +51,12 @@ function narrowStoreMap(parsed: unknown): StoreMap {
 		if (typeof conversationId !== "string") continue;
 		const idx = (value as { lastStepIdx?: unknown }).lastStepIdx;
 		const mc = (value as { lastMessageCount?: unknown }).lastMessageCount;
+		const mid = (value as { modelId?: unknown }).modelId;
 		clean[key] = {
 			conversationId,
 			lastStepIdx: typeof idx === "number" && Number.isFinite(idx) ? idx : -1,
 			lastMessageCount: typeof mc === "number" && Number.isFinite(mc) ? mc : 0,
+			...(typeof mid === "string" ? { modelId: mid } : {}),
 		};
 	}
 	return clean;
@@ -93,6 +98,7 @@ export class SessionStore {
 			conversationId: s.conversationId,
 			lastStepIdx: s.lastStepIdx ?? -1,
 			lastMessageCount: s.lastMessageCount ?? 0,
+			...(s.modelId ? { modelId: s.modelId } : {}),
 		};
 	}
 
