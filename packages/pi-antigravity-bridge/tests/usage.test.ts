@@ -159,6 +159,16 @@ test("formatAgyQuotaReport: 5h before weekly, percent and reset rendered", () =>
 	assert.match(out, /90%/);
 });
 
+test("formatAgyQuotaReport: renders group descriptions and disabled bucket notices", () => {
+	const report = parseAgyUsageJson(REAL_PAYLOAD);
+	report.groups[1].description = "Models within this group: Claude Opus, Claude Sonnet";
+	report.groups[1].buckets[1].disabled = true;
+	report.groups[1].buckets[1].description = "You have hit your weekly limit";
+	const out = formatAgyQuotaReport(report, new Date(2026, 8, 24, 15, 0));
+	assert.match(out, /Models within this group: Claude Opus/);
+	assert.match(out, /Five Hour Limit Remaining: \[disabled\] · You have hit your weekly limit/);
+});
+
 // --- fetchAgyQuota -----------------------------------------------------------
 
 test("fetchAgyQuota: fake binary end-to-end", async () => {

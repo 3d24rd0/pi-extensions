@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Improve `/agy quota` display fidelity.** Renders model group subtitles (e.g. models included in each group) and handles `disabled: true` quota buckets (e.g. 5-hour limit when weekly limit is reached) with clear explanatory notices instead of rendering a misleading 100% bar.
 - **Safety clamp on large bridge tool outputs (`clampToolOutput`, 32KB max).** Bridge tool call outputs exceeding 32,000 characters are now safely truncated at the boundary with an informative notice advising line-range or command filters. This serves as an unbreachable fuse preventing runaway command or file reads from permanently poisoning conversation context windows and exhausting rolling 3-hour quotas.
 - **Token conservation guidance in tool-priority note.** Instructs models to proactively bound tool calls with `StartLine`/`EndLine` for files over ~100 lines and use `head`, `tail`, or `--stat` for terminal commands.
 - **Filter out orchestrator and administrative tools from the bridge catalog.** Tools intended solely for Pi's primary orchestrator (`orchestrator_*`, `gentle_review*`, `gentle_odd_phase`, `session_worktree_register`) and administrative memory tools (`mem_doctor`, `mem_judge`, `mem_compare`, `mem_stats`, etc.) are now excluded from the MCP tool catalog exposed to Antigravity, reducing prompt token bloat on every turn.

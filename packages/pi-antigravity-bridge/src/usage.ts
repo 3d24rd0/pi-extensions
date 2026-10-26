@@ -21,6 +21,8 @@ const USAGE_CAP_BYTES = 1024 * 1024;
 export interface AgyQuotaBucket {
 	id?: string;
 	name: string;
+	description?: string;
+	disabled?: boolean;
 	/** agy's window tag: "weekly" | "5h" (tolerant of future tags). */
 	window: string;
 	remainingFraction: number;
@@ -59,6 +61,8 @@ function parseBucket(v: unknown): AgyQuotaBucket | undefined {
 	return {
 		id: asString(o.id),
 		name,
+		description: asString(o.description),
+		disabled: o.disabled === true,
 		window: firstString(o, ["window"]) ?? "unknown",
 		remainingFraction: Math.max(0, Math.min(1, remaining)),
 		resetTime: firstString(o, ["reset_time", "resetTime"]),
@@ -161,10 +165,18 @@ export function formatAgyQuotaReport(report: AgyQuotaReport, now: Date = new Dat
 	const lines: string[] = ["Antigravity quota (account-level, both engines)"];
 	for (const group of report.groups) {
 		lines.push("", group.name);
+		if (group.description) {
+			lines.push(`  ${group.description}`);
+		}
 		const buckets = [...group.buckets].sort(
 			(a, b) => (WINDOW_RANK[a.window] ?? 9) - (WINDOW_RANK[b.window] ?? 9),
 		);
 		for (const bucket of buckets) {
+			if (bucket.disabled) {
+				const reason = bucket.description ? ` · ${bucket.description}` : " · weekly limit reached";
+				lines.push(`  ${bucket.name}: [disabled]${reason}`);
+				continue;
+			}
 			const pct = Math.round(bucket.remainingFraction * 100);
 			const reset = bucket.resetTime !== undefined ? ` · ${resetLabel(bucket.resetTime, now)}` : "";
 			lines.push(`  ${bucket.name}: ${quotaBar(bucket.remainingFraction)} ${pct}%${reset}`);
