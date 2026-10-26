@@ -193,7 +193,7 @@ For isolation when running any agent that executes commands without a confirmati
 The extension keeps a daily log on your machine, sorted by day:
 
 ```
-~/.pi/extensions-data/3d24rd0/pi-antigravity-bridge/logs/<YYYY-MM-DD>.ndjson
+~/.pi/agent/antigravity-bridge/logs/<YYYY-MM-DD>.ndjson
 ```
 
 One JSON record per line. Two verbosity tiers keep the disk cost at zero for regular users: by default only `error` records land on disk - everything routine (turn starts, tool calls, escalations, commands, driver failures) is withheld. Warnings are not lost: the extension toasts each one in the pi UI (bridge tool failures, stalls, timeouts, process exits), so users see them and can report them; deliberate aborts and failures pi already renders as the turn's own error block stay silent. Set `AGY_DEBUG=1` before reproducing a problem for the full trail: per-event driver lifecycle (spawn, exit, session load/new, unparks), turn starts and outcomes, bridge tool calls, escalations and poll traffic, late deliveries, list-tools traffic, recycle causes, and the raw bridge chatter. `/agy doctor` prints the log directory.

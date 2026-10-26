@@ -15,31 +15,21 @@ import os from "node:os";
 import path from "node:path";
 import { normalizeAgyAgentName } from "./agents.js";
 
+/** Base directory for all antigravity-bridge persistent data (config, sessions, logs, cache). */
+export function bridgeDataDir(): string {
+	return path.join(os.homedir(), ".pi", "agent", "antigravity-bridge");
+}
+
 export function defaultConfigPath(): string {
-	return path.join(
-		os.homedir(),
-		".pi",
-		"agent",
-		"antigravity-bridge",
-		"config.json",
-	);
+	return path.join(bridgeDataDir(), "config.json");
 }
 
 const CONFIG_PATH = defaultConfigPath();
 
 /** Daily debug logs land here, sorted by day, for post-mortems and user
- *  support (see src/daily-log.ts). Same homedir convention as CONFIG_PATH;
- *  lives under the scoped extensions-data convention shared with other
- *  EstebanForge extensions. */
+ *  support (see src/daily-log.ts). Consolidated under the bridge data directory. */
 export function logsDir(): string {
-	return path.join(
-		os.homedir(),
-		".pi",
-		"extensions-data",
-		"3d24rd0",
-		"pi-antigravity-bridge",
-		"logs",
-	);
+	return path.join(bridgeDataDir(), "logs");
 }
 
 /** Which turn engine drives turns. "acp" (the official server) is the

@@ -142,9 +142,8 @@ test("bridgeServerName, mcpConfigPath and suppressionMarkerPath shapes", () => {
 		path.join(
 			"/h",
 			".pi",
-			"extensions-data",
-			"3d24rd0",
-			"pi-antigravity-bridge",
+			"agent",
+			"antigravity-bridge",
 			"suppression.json",
 		),
 	);

@@ -152,9 +152,8 @@ export function suppressionMarkerPath(home: string = os.homedir()): string {
 	return path.join(
 		home,
 		".pi",
-		"extensions-data",
-		"3d24rd0",
-		"pi-antigravity-bridge",
+		"agent",
+		"antigravity-bridge",
 		"suppression.json",
 	);
 }

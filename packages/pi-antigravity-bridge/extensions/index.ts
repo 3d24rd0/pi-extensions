@@ -158,8 +158,8 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	const FAIL_REASON_TURN_END = "antigravity turn ended with an unresolved pi tool call";
 	const FAIL_REASON_SHUTDOWN = "antigravity session shut down";
 
-	// Daily file log: every sink below feeds ~/.pi/extensions-data/
-	// 3d24rd0/pi-antigravity-bridge/logs/<YYYY-MM-DD>.ndjson (see
+	// Daily file log: every sink below feeds ~/.pi/agent/
+	// antigravity-bridge/logs/<YYYY-MM-DD>.ndjson (see
 	// src/daily-log.ts). Fire-and-forget, secrets redacted, old days pruned.
 	// Support flow: "attach the last days' files from that dir".
 	const fileLog = createDailyLogger({ dir: logsDir() });
