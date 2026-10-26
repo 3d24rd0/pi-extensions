@@ -48,6 +48,18 @@ export interface BridgeEscalation {
 
 export const POLL_TOOL_NAME = "bridge_poll_result";
 
+/** Maximum character budget for a single tool result payload before truncation.
+ *  32,000 chars is roughly 8,000 tokens — ample for normal code slices, diffs,
+ *  and tool output, while preventing runaway multi-megabyte payloads from blowing
+ *  the conversation context window and burning 3-hour quotas. */
+export const MAX_TOOL_OUTPUT_CHARS = 32_000;
+
+export function clampToolOutput(text: string, maxChars: number = MAX_TOOL_OUTPUT_CHARS): string {
+	if (text.length <= maxChars) return text;
+	const dropped = text.length - maxChars;
+	return `${text.slice(0, maxChars)}\n\n[... output truncated by antigravity-bridge: ${dropped} characters omitted to preserve token budget. Use specific line ranges (StartLine/EndLine) or command filters (grep/head/tail) to inspect sections.]`;
+}
+
 /** Default quiet period before a park escalates to a poll handle. Well under
  *  agy's ~180s request deadline; fast tools never see it. */
 export const ESCALATE_AFTER_MS = 20_000;
@@ -600,17 +612,18 @@ export class ToolRoundTrips {
 			this.#getDriver().kickIdle();
 			return true;
 		}
+		const safeText = clampToolOutput(text);
 		// Escalated call: the HTTP response already carried the poll handle, so
 		// the result lands in the registry for the next bridge_poll_result. The
 		// original promise settled with the sentinel; re-resolving is a silent
 		// no-op, so gate it to keep that explicit.
 		if (entry.escalated) {
-			this.#escalations.settleDone(toolCallId, text, isError, images);
+			this.#escalations.settleDone(toolCallId, safeText, isError, images);
 		} else {
 			entry.resolve!({
 				content: [
 					...images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })),
-					{ type: "text", text },
+					{ type: "text", text: safeText },
 				],
 				isError,
 			});
@@ -677,7 +690,7 @@ export function buildLateResultPrompt(late: LateToolResult[], userPrompt?: strin
 		[
 			`pi tool "${r.name}": ${r.reason}.`,
 			r.isError ? "The tool reported an error:" : "Result:",
-			r.text.trim() || "(no output)",
+			clampToolOutput(r.text.trim() || "(no output)"),
 		].join("\n"),
 	);
 	const header = "Late tool delivery: treat the following as the results of your earlier tool calls.";

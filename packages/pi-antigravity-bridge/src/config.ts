@@ -200,7 +200,7 @@ const DEFAULTS: AgyConfig = {
 	readOnly: false,
 	skipPermissions: true,
 	defaultModel: "flash",
-	defaultThinking: "medium",
+	defaultThinking: "low",
 	askTool: true,
 	webTools: false,
 	bridgeTools: "all",

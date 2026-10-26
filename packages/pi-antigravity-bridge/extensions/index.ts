@@ -810,7 +810,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 			if (skills.length > 0 && loadConfig().bridgeTools !== "none") {
 				tools.push({
 					name: ACTIVATE_SKILL_TOOL_NAME,
-					description: `Activate a pi Agent Skill by name. Catalog:\n${catalogSummary(skills)}`,
+					description: `Activate a pi Agent Skill by name. Available: ${catalogSummary(skills)}`,
 					inputSchema: activateSkillSchema(skills) as object,
 				});
 			}

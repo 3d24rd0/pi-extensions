@@ -162,9 +162,9 @@ export function findSkillByName(skills: SkillLite[], name: string): SkillLite | 
 	return skills.find((s) => s.name === name);
 }
 
-/** One-liner list for the tool description: `- name: description`. */
+/** Compact list of available skill names for the tool description. */
 export function catalogSummary(skills: SkillLite[]): string {
-	return skills.map((s) => `- ${s.name}: ${s.description}`).join("\n");
+	return skills.map((s) => s.name).join(", ");
 }
 
 /** Full body handed to agy when it activates a skill. */
@@ -184,7 +184,7 @@ export function activateSkillSchema(skills: SkillLite[]): Record<string, unknown
 			name: {
 				type: "string",
 				enum: skills.map((s) => s.name),
-				description: "Skill name from the catalog in this tool's description.",
+				description: "Skill name to activate.",
 			},
 		},
 		required: ["name"],

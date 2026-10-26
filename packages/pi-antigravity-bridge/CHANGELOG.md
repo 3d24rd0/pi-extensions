@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **Safety clamp on large bridge tool outputs (`clampToolOutput`, 32KB max).** Bridge tool call outputs exceeding 32,000 characters are now safely truncated at the boundary with an informative notice advising line-range or command filters. This serves as an unbreachable fuse preventing runaway command or file reads from permanently poisoning conversation context windows and exhausting rolling 3-hour quotas.
+- **Token conservation guidance in tool-priority note.** Instructs models to proactively bound tool calls with `StartLine`/`EndLine` for files over ~100 lines and use `head`, `tail`, or `--stat` for terminal commands.
+- **Filter out orchestrator and administrative tools from the bridge catalog.** Tools intended solely for Pi's primary orchestrator (`orchestrator_*`, `gentle_review*`, `gentle_odd_phase`, `session_worktree_register`) and administrative memory tools (`mem_doctor`, `mem_judge`, `mem_compare`, `mem_stats`, etc.) are now excluded from the MCP tool catalog exposed to Antigravity, reducing prompt token bloat on every turn.
+- **Set default thinking tier to `low` in defaults.** New configurations and default fallback now default to `low` thinking effort to prevent unnecessary reasoning token consumption on high-volume models like Gemini Flash.
+- **Condense `activate_skill` tool catalog description.** `activate_skill` description now provides a concise comma-separated list of available skill names instead of full multi-line descriptions that duplicated the system prompt.
+
 ## [1.8.7] - 2026-10-21
 
 ### Changed
