@@ -47,12 +47,6 @@ npm run typecheck
 npm test
 ```
 
-## Acknowledgements
-
-Based on the original monorepo and extensions developed by [@EstebanForge](https://github.com/EstebanForge):
-- Source repository: [EstebanForge/pi-extensions](https://github.com/EstebanForge/pi-extensions)
-- Special thanks to Esteban for creating the foundational Pi extensions and tooling ecosystem.
-
 ## License
 
 MIT

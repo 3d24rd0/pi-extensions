@@ -153,7 +153,7 @@ export function suppressionMarkerPath(home: string = os.homedir()): string {
 		home,
 		".pi",
 		"extensions-data",
-		"estebanforge",
+		"3d24rd0",
 		"pi-antigravity-bridge",
 		"suppression.json",
 	);

@@ -143,7 +143,7 @@ test("bridgeServerName, mcpConfigPath and suppressionMarkerPath shapes", () => {
 			"/h",
 			".pi",
 			"extensions-data",
-			"estebanforge",
+			"3d24rd0",
 			"pi-antigravity-bridge",
 			"suppression.json",
 		),

@@ -1,6 +1,6 @@
 # pi-extensions AGENTS.md
 
-Monorepo for the 17 `@estebanforge/pi-*` Pi Coding Agent extensions. npm workspaces, no build step: packages publish raw TypeScript and Pi loads it directly.
+Personal suite of Pi Coding Agent extensions, skills, and prompts for `@3d24rd0`. Single workspace package (`packages/pi-antigravity-bridge`) with raw TypeScript loaded directly by Pi.
 
 ## Layout
 

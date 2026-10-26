@@ -36,7 +36,7 @@ export function logsDir(): string {
 		os.homedir(),
 		".pi",
 		"extensions-data",
-		"estebanforge",
+		"3d24rd0",
 		"pi-antigravity-bridge",
 		"logs",
 	);

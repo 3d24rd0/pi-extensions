@@ -193,7 +193,7 @@ For isolation when running any agent that executes commands without a confirmati
 The extension keeps a daily log on your machine, sorted by day:
 
 ```
-~/.pi/extensions-data/estebanforge/pi-antigravity-bridge/logs/<YYYY-MM-DD>.ndjson
+~/.pi/extensions-data/3d24rd0/pi-antigravity-bridge/logs/<YYYY-MM-DD>.ndjson
 ```
 
 One JSON record per line. Two verbosity tiers keep the disk cost at zero for regular users: by default only `error` records land on disk - everything routine (turn starts, tool calls, escalations, commands, driver failures) is withheld. Warnings are not lost: the extension toasts each one in the pi UI (bridge tool failures, stalls, timeouts, process exits), so users see them and can report them; deliberate aborts and failures pi already renders as the turn's own error block stay silent. Set `AGY_DEBUG=1` before reproducing a problem for the full trail: per-event driver lifecycle (spawn, exit, session load/new, unparks), turn starts and outcomes, bridge tool calls, escalations and poll traffic, late deliveries, list-tools traffic, recycle causes, and the raw bridge chatter. `/agy doctor` prints the log directory.
@@ -226,6 +226,10 @@ This is engineering analysis, not legal advice. Use against your own Antigravity
 ## Delegation tool: background is refused
 
 The `AskAntigravity` delegation tool rejects `background: true` by design: a background wake would land in the pi session even when the caller is a nested delegation through the bridge catalog, and long delegations already have the bridge's own async flow (early-ack plus `bridge_poll_result`). Call without `background`; for unattended peer runs launch the CLI directly in a terminal.
+
+## Acknowledgements
+
+Based on the original extension developed by [@EstebanForge](https://github.com/EstebanForge) in [EstebanForge/pi-extensions](https://github.com/EstebanForge/pi-extensions).
 
 ## License
 
