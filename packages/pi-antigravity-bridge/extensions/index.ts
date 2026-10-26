@@ -175,7 +175,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 	fileLog.log = (event, data, level) => {
 		rawFileLog(event, data, level);
 		if (level !== "warn") return;
-		if (event.startsWith("abort:") || event === "connection-exited") return;
+		if (event.startsWith("abort:") || event === "connection-exited" || event === "turn-end") return;
 		const d = (data ?? {}) as Record<string, unknown>;
 		let text: string;
 		if (event === "round-trip-fail") {
