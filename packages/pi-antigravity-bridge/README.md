@@ -1,115 +1,114 @@
 # pi-antigravity-bridge
 
-> Provider de modelos de Google Antigravity (Gemini 4 Argon, Gemini 3.8 Flash y Claude 5.5) y herramienta de delegación `AskAntigravity` para [pi](https://github.com/earendil-works/pi), usando tu propia cuota de suscripción.
+> Google Antigravity model provider (Gemini 4 Argon, Gemini 3.8 Flash, and Claude 5.5) and `AskAntigravity` delegation tool for [pi](https://github.com/earendil-works/pi), powered by your subscription quota.
 
-Soporta dos motores de ejecución seleccionables directamente desde el modelo:
-- **ACP (Official Server):** Servidor oficial de Google (`agy_acp_server.par`) vía JSON-RPC. Soporta imágenes y tarjetas nativas con diffs en Pi.
-- **CLI (stream-json):** Proceso persistente de la CLI `agy`. Soporta modelos Claude y puente completo de herramientas de Pi vía MCP.
+Supports two execution engines selectable directly from the model name:
+- **ACP (Official Server):** Google's official server (`agy_acp_server.par`) over JSON-RPC. Supports image inputs and native inline diff cards in Pi.
+- **CLI (stream-json):** Persistent `agy` CLI process. Supports Claude models and a full Pi tool bridge via MCP.
 
 ---
 
-## Inicio Rápido
+## Quickstart
 
-### 1. Requisitos
-Tener instalada y autenticada la CLI oficial de Antigravity:
+### 1. Requirements
+Ensure the official Antigravity CLI is installed and authenticated:
 ```bash
-# Verificar instalación y autenticación
+# Verify CLI installation and authentication
 agy models
 ```
 
-### 2. Instalación en Pi
+### 2. Installation in Pi
 ```bash
 pi install git:github.com/3d24rd0/pi-extensions
 ```
 
-### 3. Selección de Modelo
-Abre el selector interactivo en Pi:
+### 3. Model Selection
+Open Pi's model selector:
 ```bash
 /model
 ```
-Elige cualquier modelo bajo el namespace `antigravity/`:
-- `Gemini 4 Argon (ACP)` o `(CLI)`
-- `Gemini 3.8 Flash (ACP)` o `(CLI)`
+Choose any model under the `antigravity/` namespace:
+- `Gemini 4 Argon (ACP)` or `(CLI)`
+- `Gemini 3.8 Flash (ACP)` or `(CLI)`
 - `Claude Opus 5.5 (CLI)`
 - `Claude Sonnet 5.5 (CLI)`
 
-*(Nota: Los modelos Gemini y Claude incluyen selector de nivel de pensamiento: `low`, `medium`, `high`).*
+*(Note: Gemini and Claude models include reasoning effort levels: `low`, `medium`, `high`).*
 
 ---
 
-## Modelos y Motores
+## Models & Engines
 
-| Modelo | Motor | Entrada | Herramientas Pi | Características |
+| Model | Engine | Input | Pi Tools | Key Features |
 |---|---|---|---|---|
-| **Gemini 4 Argon (ACP)** | ACP | Texto + Imagen | Sí (vía Bridge MCP) | Razonamiento profundo, tarjetas nativas con diffs |
-| **Gemini 4 Argon (CLI)** | CLI | Texto | Sí (vía Bridge MCP) | Razonamiento profundo vía CLI agy |
-| **Gemini 3.8 Flash (ACP)** | ACP | Texto + Imagen | Sí (vía Bridge MCP) | Máxima velocidad, bajo consumo de cuota |
-| **Gemini 3.8 Flash (CLI)** | CLI | Texto | Sí (vía Bridge MCP) | Ejecución rápida stream-json |
-| **Claude Opus 5.5 (CLI)** | CLI | Texto | Sí (vía Bridge MCP) | Razonamiento avanzado Claude |
-| **Claude Sonnet 5.5 (CLI)** | CLI | Texto | Sí (vía Bridge MCP) | Balance velocidad/calidad Claude |
+| **Gemini 4 Argon (ACP)** | ACP | Text + Image | Yes (via MCP Bridge) | Deep reasoning, native diff cards |
+| **Gemini 4 Argon (CLI)** | CLI | Text | Yes (via MCP Bridge) | Deep reasoning via agy CLI |
+| **Gemini 3.8 Flash (ACP)** | ACP | Text + Image | Yes (via MCP Bridge) | Low latency, minimal quota usage |
+| **Gemini 3.8 Flash (CLI)** | CLI | Text | Yes (via MCP Bridge) | Fast stream-json execution |
+| **Claude Opus 5.5 (CLI)** | CLI | Text | Yes (via MCP Bridge) | Advanced Claude reasoning |
+| **Claude Sonnet 5.5 (CLI)** | CLI | Text | Yes (via MCP Bridge) | Balanced speed & quality |
 
 ---
 
-## Comandos `/agy`
+## `/agy` Commands
 
-Configura y diagnostica el proveedor en tiempo real. Los ajustes se guardan en `~/.pi/agent/antigravity-bridge/config.json`:
+Configure and diagnose the provider in real time. Settings persist to `~/.pi/agent/antigravity-bridge/config.json`:
 
-| Comando | Descripción |
+| Command | Description |
 |---|---|
-| `/agy` | Abre el menú interactivo de configuración (TUI). |
-| `/agy doctor` | Diagnóstico completo: estado de conexión, contadores, versiones y rutas. |
-| `/agy auth` | Inicia sesión en el servidor ACP abriendo el navegador. |
-| `/agy quota` | Muestra la cuota restante de tu suscripción de Antigravity. |
-| `/agy mode accept-edits \| plan` | Cambia el modo de ejecución (por defecto `accept-edits`). |
-| `/agy ask on \| off` | Activa/desactiva la herramienta de delegación `AskAntigravity`. |
-| `/agy bridge all \| mcp \| none` | Qué herramientas de Pi se exponen a Antigravity (por defecto `all`). |
-| `/agy tools [hide \| show \| reset]` | Oculta herramientas específicas de Pi del catálogo del modelo. |
-| `/agy clear` | Limpia los enlaces de conversación guardados (fuerza sesión limpia). |
+| `/agy` | Open interactive settings dialog (TUI). |
+| `/agy doctor` | Comprehensive health check: bridge status, driver counters, versions, and paths. |
+| `/agy auth` | Launch browser login for the ACP server. |
+| `/agy quota` | Show remaining Antigravity subscription quota. |
+| `/agy mode accept-edits \| plan` | Set execution mode (default: `accept-edits`). |
+| `/agy ask on \| off` | Enable/disable the `AskAntigravity` delegation tool. |
+| `/agy bridge all \| mcp \| none` | Control which Pi tools are exposed to Antigravity (default: `all`). |
+| `/agy tools [hide \| show \| reset]` | Hide specific Pi tools from the model catalog. |
+| `/agy clear` | Clear stored conversation bindings (forces fresh sessions). |
 
 ---
 
-## Delegación con `AskAntigravity`
+## Delegation via `AskAntigravity`
 
-La extensión incluye la herramienta `AskAntigravity` para delegar subtareas en una instancia aislada de `agy`:
+Use the built-in `AskAntigravity` tool to delegate tasks to an isolated `agy` instance:
 ```markdown
-Usa AskAntigravity para investigar o resolver un problema en segundo plano.
-Parámetros: prompt, model (opcional), thinking (opcional), includeContext (opcional).
+AskAntigravity parameters: prompt, model (optional), thinking (optional), includeContext (optional).
 ```
 
 ---
 
-## Ubicación de Datos y Logs
+## Runtime Data & Logs
 
-Todo el almacenamiento persistente se consolida bajo un único directorio limpio:
+All persistent data is consolidated under a single directory:
 
 ```
 ~/.pi/agent/antigravity-bridge/
-├── config.json           # Configuración de usuario
-├── sessions.json         # Enlaces de sesión Pi <-> Conversación agy
-├── models-cache.json     # Caché del catálogo de modelos agy
-├── suppression.json      # Marcador de concurrencia del bridge
-├── ask-context/          # Temporales para exportación de contexto
-└── logs/                 # Logs diarios de diagnóstico
+├── config.json           # User configuration
+├── sessions.json         # Session bindings (Pi <-> agy conversation)
+├── models-cache.json     # agy model catalog cache
+├── suppression.json      # Cross-process delegation suppression marker
+├── ask-context/          # Temporary scratch exports for context inclusion
+└── logs/                 # Daily diagnostic logs
     └── YYYY-MM-DD.ndjson
 ```
 
-- **Privacidad:** No se registran prompts, argumentos sensibles ni secretos (redacción automática activa).
-- **Retención:** 14 días. Archivos antiguos se purgan automáticamente.
+- **Privacy:** Prompts, sensitive tool arguments, and secrets are never logged (automatic pattern redaction).
+- **Retention:** 14-day automatic pruning.
 
 ---
 
-## Documentación Técnica Avanzada
+## Advanced Documentation
 
-Para profundizar en el diseño interno y protocolos:
-- [Arquitectura del Bridge](docs/ARCHITECTURE.md): protocolo de round-trip MCP, manejo de suspensiones y timeouts.
-- [Approval Gate](docs/APPROVAL-GATE.md): intercepción y control de permisos en herramientas nativas de agy.
-- [Comparativa de Motores](docs/ENGINES.md): detalles entre JSON-RPC (ACP) y stream-json (CLI).
-- [Guía de Desarrollo](docs/DEVELOPMENT.md): instrucciones para tests, mocks y depuración.
+For protocol and internal architecture details:
+- [Bridge Architecture](docs/ARCHITECTURE.md): MCP round-trip protocol, long-call escalation, and timeouts.
+- [Approval Gate](docs/APPROVAL-GATE.md): Pi-side gating for native agy tools.
+- [Engine Comparison](docs/ENGINES.md): Technical comparison between JSON-RPC (ACP) and stream-json (CLI).
+- [Development Guide](docs/DEVELOPMENT.md): Testing, mocks, and local development instructions.
 
 ---
 
-## Agradecimientos y Licencia
+## Acknowledgements & License
 
-Basado en la extensión original desarrollada por [@EstebanForge](https://github.com/EstebanForge) en [EstebanForge/pi-extensions](https://github.com/EstebanForge/pi-extensions).
+Based on the original extension developed by [@EstebanForge](https://github.com/EstebanForge) in [EstebanForge/pi-extensions](https://github.com/EstebanForge/pi-extensions).
 
-Licencia [MIT](LICENSE).
+Licensed under [MIT](LICENSE).
