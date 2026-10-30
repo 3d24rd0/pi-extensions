@@ -37,15 +37,6 @@
   "pi": {
     "extensions": [
       "./packages/pi-antigravity-bridge/extensions"
-    ],
-    "skills": [
-      "./skills"
-    ],
-    "prompts": [
-      "./prompts/*.md"
-    ],
-    "themes": [
-      "./themes/*.json"
     ]
   },
   "repository": {

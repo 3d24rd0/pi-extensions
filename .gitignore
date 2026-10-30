@@ -11,3 +11,7 @@ coverage/
 *.log
 .env*
 PLAN.md
+odd/
+.atl/
+.agents/
+.gemini/
