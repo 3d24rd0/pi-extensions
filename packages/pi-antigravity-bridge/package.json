@@ -1,6 +1,6 @@
 {
   "name": "@3d24rd0/pi-antigravity-bridge",
-  "version": "1.8.7",
+  "version": "1.0.0",
   "description": "Gemini provider for Pi on the Antigravity ACP server (official Google ACP) or the stream-json agy CLI. Use antigravity/* models in Pi. Full /model picker support. Models runs Pi's tools. ToS safe to use.",
   "keywords": [
     "pi-package",
@@ -20,7 +20,9 @@
   ],
   "license": "MIT",
   "author": {
-    "name": "3d24rd0"
+    "name": "Eduardo Martínez Catalá (3d24rd0)",
+    "email": "3d24rd0@gmail.com",
+    "url": "https://github.com/3d24rd0"
   },
   "repository": {
     "type": "git",
@@ -44,7 +46,9 @@
     ]
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^1.0.0"
+    "@earendil-works/pi-coding-agent": ">=1.0.0",
+    "@earendil-works/pi-tui": ">=1.0.0",
+    "typebox": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@earendil-works/pi-coding-agent": {

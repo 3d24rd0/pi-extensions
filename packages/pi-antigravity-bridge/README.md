@@ -97,16 +97,6 @@ All persistent data is consolidated under a single directory:
 
 ---
 
-## Advanced Documentation
-
-For protocol and internal architecture details:
-- [Bridge Architecture](docs/ARCHITECTURE.md): MCP round-trip protocol, long-call escalation, and timeouts.
-- [Approval Gate](docs/APPROVAL-GATE.md): Pi-side gating for native agy tools.
-- [Engine Comparison](docs/ENGINES.md): Technical comparison between JSON-RPC (ACP) and stream-json (CLI).
-- [Development Guide](docs/DEVELOPMENT.md): Testing, mocks, and local development instructions.
-
----
-
 ## Acknowledgements & License
 
 Based on the original extension developed by [@EstebanForge](https://github.com/EstebanForge) in [EstebanForge/pi-extensions](https://github.com/EstebanForge/pi-extensions).

@@ -2,10 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.0.0] - 2026-10-31
 
 ### Changed
 
+- Initial 1.0.0 release of `@3d24rd0/pi-antigravity-bridge`.
 - **Improve `/agy quota` display fidelity.** Renders model group subtitles (e.g. models included in each group) and handles `disabled: true` quota buckets (e.g. 5-hour limit when weekly limit is reached) with clear explanatory notices instead of rendering a misleading 100% bar.
 - **Safety clamp on large bridge tool outputs (`clampToolOutput`, 32KB max).** Bridge tool call outputs exceeding 32,000 characters are now safely truncated at the boundary with an informative notice advising line-range or command filters. This serves as an unbreachable fuse preventing runaway command or file reads from permanently poisoning conversation context windows and exhausting rolling 3-hour quotas.
 - **Token conservation guidance in tool-priority note.** Instructs models to proactively bound tool calls with `StartLine`/`EndLine` for files over ~100 lines and use `head`, `tail`, or `--stat` for terminal commands.

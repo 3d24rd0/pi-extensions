@@ -10,13 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run test",
-    "prepublishOnly": "npm run check",
-    "rel": "node scripts/release-pkg.mjs",
-    "pub": "node scripts/publish-pkg.mjs",
-    "release:patch": "node scripts/release.mjs patch",
-    "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
+    "check": "npm run typecheck && npm run test"
   },
   "devDependencies": {
     "@colbymchenry/codegraph": "^1.0.1",
@@ -44,7 +38,9 @@
     "url": "git+https://github.com/3d24rd0/pi-extensions.git"
   },
   "author": {
-    "name": "3d24rd0"
+    "name": "Eduardo Martínez Catalá (3d24rd0)",
+    "email": "3d24rd0@gmail.com",
+    "url": "https://github.com/3d24rd0"
   },
   "keywords": [
     "pi-package"
