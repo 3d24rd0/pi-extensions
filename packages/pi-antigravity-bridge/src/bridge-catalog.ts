@@ -7,8 +7,10 @@ export interface BridgeToolInfo {
 	sourceInfo?: { source?: string };
 }
 
-/** Prefixes of tools that are strictly for Pi's orchestrator or review harness and must never be bridged into agy. */
-const EXCLUDED_PREFIXES = ["orchestrator_", "gentle_review"] as const;
+/** Prefixes of tools that are strictly for Pi's internal orchestrator and must never be bridged into agy.
+ *  Note: gentle_review* is NOT excluded so that when Pi runs with Antigravity as the primary orchestrator,
+ *  the session can legitimately perform RDD review authority inspections. */
+const EXCLUDED_PREFIXES = ["orchestrator_"] as const;
 
 /** Exact tool names that must never be bridged into agy:
  *  1. Bridge-internal / recursive tools (AskAntigravity, web tools, activate_skill, etc.).

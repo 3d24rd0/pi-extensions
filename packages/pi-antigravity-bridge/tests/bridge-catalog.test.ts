@@ -22,19 +22,19 @@ describe("live Pi bridge catalog", () => {
 	});
 	it("supports session-only hide, MCP-only mode, and bridge-off", () => {
 		const active = all.map((tool) => tool.name);
-		expect(bridgedPiTools(all, active, "all", new Set(["web_search", "mem_search"])).map((t) => t.name)).toEqual(["mcp:files"]);
+		expect(bridgedPiTools(all, active, "all", new Set(["web_search", "mem_search", "gentle_review"])).map((t) => t.name)).toEqual(["mcp:files"]);
 		expect(bridgedPiTools(all, active, "mcp", new Set()).map((t) => t.name)).toEqual(["mcp:files"]);
 		expect(bridgedPiTools(all, active, "none", new Set()).map((t) => t.name)).toEqual([]);
 	});
 	it("never exposes the bridge's own tools, including the web wrappers", () => {
 		const active = all.map((tool) => tool.name);
-		expect(bridgedPiTools(all, active, "all", new Set()).map((t) => t.name)).toEqual(["web_search", "mcp:files", "mem_search"]);
+		expect(bridgedPiTools(all, active, "all", new Set()).map((t) => t.name)).toEqual(["web_search", "mcp:files", "gentle_review", "mem_search"]);
 	});
-	it("filters out orchestrator, review lifecycle, and admin memory tools", () => {
+	it("filters out orchestrator and admin memory tools while allowing gentle_review", () => {
 		expect(isExcludedBridgeTool("orchestrator_consult")).toBe(true);
 		expect(isExcludedBridgeTool("orchestrator_send_message")).toBe(true);
-		expect(isExcludedBridgeTool("gentle_review")).toBe(true);
-		expect(isExcludedBridgeTool("gentle_review_capture")).toBe(true);
+		expect(isExcludedBridgeTool("gentle_review")).toBe(false);
+		expect(isExcludedBridgeTool("gentle_review_capture")).toBe(false);
 		expect(isExcludedBridgeTool("gentle_odd_phase")).toBe(true);
 		expect(isExcludedBridgeTool("mem_doctor")).toBe(true);
 		expect(isExcludedBridgeTool("mem_judge")).toBe(true);
