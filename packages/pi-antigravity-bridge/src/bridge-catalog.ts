@@ -27,10 +27,8 @@ const EXCLUDED_EXACT = new Set([
 	// Pi orchestrator lifecycle
 	"gentle_odd_phase",
 	"session_worktree_register",
-	// Admin memory tools (keep mem_search, mem_save, mem_update, mem_context, mem_session_summary, mem_get_observation, mem_current_project)
+	// Admin memory tools (keep mem_search, mem_save, mem_update, mem_context, mem_session_summary, mem_get_observation, mem_current_project, mem_judge, mem_review, mem_compare)
 	"mem_doctor",
-	"mem_judge",
-	"mem_compare",
 	"mem_pin",
 	"mem_unpin",
 	"mem_timeline",
@@ -38,7 +36,6 @@ const EXCLUDED_EXACT = new Set([
 	"mem_session_start",
 	"mem_session_end",
 	"mem_capture_passive",
-	"mem_review",
 	"mem_list_projects",
 ]);
 

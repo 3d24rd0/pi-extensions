@@ -30,14 +30,16 @@ describe("live Pi bridge catalog", () => {
 		const active = all.map((tool) => tool.name);
 		expect(bridgedPiTools(all, active, "all", new Set()).map((t) => t.name)).toEqual(["web_search", "mcp:files", "gentle_review", "mem_search"]);
 	});
-	it("filters out orchestrator and admin memory tools while allowing gentle_review", () => {
+	it("filters out orchestrator and admin memory tools while allowing gentle_review and judgment tools", () => {
 		expect(isExcludedBridgeTool("orchestrator_consult")).toBe(true);
 		expect(isExcludedBridgeTool("orchestrator_send_message")).toBe(true);
 		expect(isExcludedBridgeTool("gentle_review")).toBe(false);
 		expect(isExcludedBridgeTool("gentle_review_capture")).toBe(false);
 		expect(isExcludedBridgeTool("gentle_odd_phase")).toBe(true);
 		expect(isExcludedBridgeTool("mem_doctor")).toBe(true);
-		expect(isExcludedBridgeTool("mem_judge")).toBe(true);
+		expect(isExcludedBridgeTool("mem_judge")).toBe(false);
+		expect(isExcludedBridgeTool("mem_review")).toBe(false);
+		expect(isExcludedBridgeTool("mem_compare")).toBe(false);
 		expect(isExcludedBridgeTool("mem_search")).toBe(false);
 		expect(isExcludedBridgeTool("mem_save")).toBe(false);
 	});
