@@ -43,6 +43,7 @@ import path from "node:path";
 import { TurnDiffContext, createExecGitOps, formatInlineDiff, parseEditToolInput } from "./diff-render.js";
 import { stageSyspromptAgent } from "./sysprompt-agent.js";
 import { estimateTranscriptTokens } from "./acp/usage-estimate.js";
+import { buildQuotaHeaders, getLastQuotaReport } from "./usage.js";
 
 const DEFAULT_TIMEOUT_MIN = 10;
 
@@ -482,9 +483,10 @@ async function runTurnDriver(
 	}
 	const blocks: BlockState = { partial, textIdx: null, thinkingIdx: null, started: false };
 
+	const isEphemeral = options?.cacheRetention === "none";
 	const cwd = (options as { cwd?: string } | undefined)?.cwd ?? process.cwd();
 	const key = sessionKey(options, cwd, deps.engine);
-	let existing = store.get(key);
+	let existing = isEphemeral ? null : store.get(key);
 	const messageCount = context.messages.length;
 	const config = loadConfig();
 
@@ -716,6 +718,26 @@ async function runTurnDriver(
 		}
 	}
 
+	if (options?.onResponse) {
+		try {
+			const quotaHeaders = buildQuotaHeaders(getLastQuotaReport());
+			await options.onResponse(
+				{
+					status: 200,
+					headers: {
+						"x-provider": "antigravity",
+						"x-antigravity-engine": deps.engine,
+						"x-antigravity-model": agyModel,
+						...quotaHeaders,
+					},
+				},
+				model,
+			);
+		} catch {
+			// Best-effort telemetry callback; listener errors must not fail the generation.
+		}
+	}
+
 	ensureStarted(stream, blocks);
 	const diffCtx = new TurnDiffContext(createExecGitOps());
 	const feats: ActivityFeatures = {
@@ -753,7 +775,7 @@ async function runTurnDriver(
 		outcome.sawResult === false &&
 		Boolean(existing?.conversationId);
 	if (silentDrop || poisonedResume) {
-		if (existing?.conversationId || outcome.conversationId) {
+		if (!isEphemeral && (existing?.conversationId || outcome.conversationId)) {
 			store.delete(key);
 			if (outcome.conversationId) stagedAgentByConversation.delete(outcome.conversationId);
 		}
@@ -819,7 +841,7 @@ async function runTurnDriver(
 			}
 		}
 	}
-	if (outcome.conversationId) {
+	if (outcome.conversationId && !isEphemeral) {
 		// A different id than the stored one means the driver recreated the
 		// conversation under us (ACP session-load fallback, stream-json CLI
 		// dropping a stale --conversation). The recreated conversation has seen

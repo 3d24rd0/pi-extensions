@@ -28,6 +28,7 @@ import { ToolRoundTrips, WrapperReplay, consumeActivity, createStreamSimple } fr
 import { toAgyEffort } from "../src/models.js";
 import { TurnDiffContext } from "../src/diff-render.js";
 import { SessionStore } from "../src/sessions.js";
+import { setCachedQuotaReport } from "../src/usage.js";
 import type { StreamDriver, DriverTurnRequest } from "../src/driver.js";
 
 const model: Model<Api> = {
@@ -408,4 +409,89 @@ test("Gate C: consumeActivity skips native re-exec and wrapper replay on ACP eng
 	assert.equal(res, "continue");
 	assert.equal(partial.stopReason, "stop");
 	assert.ok(partial.content.some((b) => b.type === "thinking" && b.thinking.includes("[agy tool: view_file]")));
+});
+
+test("streamSimple invokes options.onResponse with provider and quota headers", async () => {
+	const seen: { opts?: DriverTurnRequest } = {};
+	const driver = capturingDriver(seen);
+	const store = new SessionStore(tmpStorePath());
+	const streamSimple = createStreamSimple({
+		entries: [{ full: "gemini-3.6-flash", id: "gemini-flash" }],
+		store,
+		driver,
+		roundTrips: new ToolRoundTrips(driver),
+	});
+
+	setCachedQuotaReport({
+		groups: [
+			{
+				name: "Gemini",
+				buckets: [
+					{ name: "5h window", window: "5h", remainingFraction: 0.85, resetTime: "2026-10-31T05:00:00Z" },
+				],
+			},
+		],
+	});
+
+	let responseReceived: { status?: number; headers?: Record<string, string> } | undefined;
+	const stream = streamSimple(
+		{ ...model, id: "gemini-flash" },
+		contextWith("test prompt"),
+		{
+			cwd: process.cwd(),
+			onResponse: (res: { status?: number; headers?: Record<string, string> }) => {
+				responseReceived = res;
+			},
+		} as unknown as SimpleStreamOptions,
+	);
+	for await (const ev of stream) void ev;
+
+	assert.ok(responseReceived);
+	assert.equal(responseReceived.status, 200);
+	assert.equal(responseReceived.headers?.["x-provider"], "antigravity");
+	assert.equal(responseReceived.headers?.["x-antigravity-model"], "gemini-3.6-flash");
+	assert.equal(responseReceived.headers?.["x-antigravity-quota-5h"], "85");
+	assert.equal(responseReceived.headers?.["x-ratelimit-remaining"], "85");
+	setCachedQuotaReport(undefined);
+});
+
+test("streamSimple isolates ephemeral turns with cacheRetention: 'none'", async () => {
+	const seen: { opts?: DriverTurnRequest } = {};
+	const driver = capturingDriver(seen);
+	const storePath = tmpStorePath();
+	const store = new SessionStore(storePath);
+
+	const cwd = process.cwd();
+	store.set(`cwd:${cwd}`, {
+		conversationId: "conv-existing-123",
+		lastStepIdx: 5,
+		lastMessageCount: 2,
+		modelId: "gemini-3.6-flash",
+	});
+
+	const streamSimple = createStreamSimple({
+		entries: [{ full: "gemini-3.6-flash", id: "gemini-flash" }],
+		store,
+		driver,
+		roundTrips: new ToolRoundTrips(driver),
+	});
+
+	const stream = streamSimple(
+		{ ...model, id: "gemini-flash" },
+		contextWith("summarize session"),
+		{
+			cwd,
+			cacheRetention: "none",
+		} as unknown as SimpleStreamOptions,
+	);
+	for await (const ev of stream) void ev;
+
+	// Must NOT reuse the existing conversation ID
+	assert.equal(seen.opts?.conversationId, null);
+
+	// Must NOT overwrite or delete the existing conversation binding in store
+	const storedAfter = store.get(`cwd:${cwd}`);
+	assert.ok(storedAfter);
+	assert.equal(storedAfter.conversationId, "conv-existing-123");
+	assert.equal(storedAfter.lastMessageCount, 2);
 });

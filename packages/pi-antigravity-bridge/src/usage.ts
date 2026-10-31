@@ -114,6 +114,41 @@ export function parseAgyUsageJson(text: string): AgyQuotaReport {
 	return { groups };
 }
 
+let cachedQuotaReport: AgyQuotaReport | undefined;
+
+/** Retrieve the most recently cached quota report, if available. */
+export function getLastQuotaReport(): AgyQuotaReport | undefined {
+	return cachedQuotaReport;
+}
+
+/** Set or clear the cached quota report (tests or manual updates). */
+export function setCachedQuotaReport(report: AgyQuotaReport | undefined): void {
+	cachedQuotaReport = report;
+}
+
+/** Build HTTP response headers from an AgyQuotaReport for options.onResponse. */
+export function buildQuotaHeaders(report?: AgyQuotaReport): Record<string, string> {
+	if (!report || report.groups.length === 0) return {};
+	const headers: Record<string, string> = {};
+	for (const g of report.groups) {
+		for (const b of g.buckets) {
+			if (b.disabled) continue;
+			const key = `x-antigravity-quota-${b.window}`;
+			const pct = Math.round(b.remainingFraction * 100);
+			headers[key] = String(pct);
+			if (b.resetTime) {
+				headers[`${key}-reset`] = b.resetTime;
+			}
+			// Map 5h / short window to standard x-ratelimit headers if not yet set
+			if (b.window === "5h" && !headers["x-ratelimit-remaining"]) {
+				headers["x-ratelimit-remaining"] = String(pct);
+				if (b.resetTime) headers["x-ratelimit-reset"] = b.resetTime;
+			}
+		}
+	}
+	return headers;
+}
+
 /** Fetch quota through the CLI. Undefined on any fetch failure (missing
  *  binary, non-zero exit, timeout, cap) — same degrade-to-empty contract as
  *  the model catalog; the caller renders the difference. The spawn watchdog
@@ -128,7 +163,9 @@ export async function fetchAgyQuota(binary: string): Promise<AgyQuotaReport | un
 	);
 	if (raw === "") return undefined;
 	try {
-		return parseAgyUsageJson(raw);
+		const report = parseAgyUsageJson(raw);
+		cachedQuotaReport = report;
+		return report;
 	} catch {
 		return undefined;
 	}

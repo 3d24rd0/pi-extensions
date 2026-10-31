@@ -105,6 +105,41 @@ test("mcp-server: 403s requests without or with a wrong x-bridge-token", async (
 	assert.ok(Array.isArray(payload.result?.tools));
 });
 
+test("mcp-server: advertises tools.listChanged capability on initialize", async () => {
+	const r = await startMcpServer(fakeDeps());
+	handle = r.handle!;
+	assert.equal(r.ok, true);
+	const url = `http://127.0.0.1:${handle.port}/mcp`;
+	const body = JSON.stringify({
+		jsonrpc: "2.0",
+		id: 1,
+		method: "initialize",
+		params: {
+			protocolVersion: "2024-11-05",
+			capabilities: {},
+			clientInfo: { name: "test-client", version: "1.0.0" },
+		},
+	});
+	const res = await fetch(url, {
+		method: "POST",
+		headers: {
+			"content-type": "application/json",
+			accept: "application/json, text/event-stream",
+			[TOKEN_HEADER]: handle.token,
+		},
+		body,
+	});
+	assert.equal(res.status, 200);
+	const text = await res.text();
+	const dataLine = text.split("\n").find((l) => l.startsWith("data:"));
+	assert.ok(dataLine, "expected an SSE data line");
+	const payload = JSON.parse(dataLine.slice(5).trim()) as {
+		result?: { serverInfo?: { version?: string }; capabilities?: { tools?: { listChanged?: boolean } } };
+	};
+	assert.equal(payload.result?.serverInfo?.version, "1.0.0");
+	assert.equal(payload.result?.capabilities?.tools?.listChanged, true);
+});
+
 test("mcp-server: no stale config before start", () => {
 	// Sanity: the per-pid path is only present while a server runs in this pid.
 	assert.equal(bridgeMcpConfigExists(), fs.existsSync(bridgeMcpConfigPathForTest()));

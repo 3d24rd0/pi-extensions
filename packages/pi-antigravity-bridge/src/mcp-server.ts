@@ -331,8 +331,8 @@ export async function startMcpServer(
 
 	const makeServer = (signal: AbortSignal) => {
 		const s = new Server(
-			{ name: "pi-antigravity-bridge", version: "1.1.0" },
-			{ capabilities: { tools: {} } },
+			{ name: "pi-antigravity-bridge", version: "1.0.0" },
+			{ capabilities: { tools: { listChanged: true } } },
 		);
 		s.setRequestHandler(ListToolsRequestSchema, listHandler);
 		s.setRequestHandler(CallToolRequestSchema, (request) => callHandler(request, signal));
